@@ -9,7 +9,7 @@ class User
     // {"username":"admin","password":"admin"}
     include "connection.php";
     $json = json_decode($json, true);
-    $sql = "SELECT * FROM tbl_user WHERE user_username = :username  AND BINARY user_password = :password";
+    $sql = "SELECT * FROM tbl_personal_information WHERE email = :username  AND BINARY personal_password = :password";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':username', $json['username']);
     $stmt->bindParam(':password', $json['password']);
@@ -158,6 +158,47 @@ class User
     return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
   }
 
+  function getAppliedJobs()
+  {
+    include "connection.php";
+
+    try {
+
+      $json = file_get_contents('php://input');
+      $data = json_decode($json, true);
+
+
+      error_log(print_r($data, true));
+
+      if (!isset($data['personal_info_id'])) {
+        return json_encode(["error" => "personal_info_id not provided"]);
+      }
+
+      $personal_info_id = (int) $data['personal_info_id'];
+
+      $sql = "SELECT a.apply_position_name
+                  FROM tbl_apply_position a
+                  INNER JOIN tbl_position_applied b
+                  ON a.apply_position_id = b.apply_position_id
+                  WHERE b.personal_info_id = :personal_info_id";
+
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':personal_info_id', $personal_info_id, PDO::PARAM_INT);
+      $stmt->execute();
+
+      $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+      if (empty($result)) {
+        return json_encode(["error" => "No applied jobs found"]);
+      }
+
+      return json_encode($result);
+
+    } catch (PDOException $e) {
+      return json_encode(["error" => "Database error: " . $e->getMessage()]);
+    }
+  }
+
 
 
 } //user
@@ -242,6 +283,11 @@ switch ($operation) {
   case "getActiveJob":
     echo $user->getActiveJob();
     break;
+  case "getAppliedJobs":
+    echo $user->getAppliedJobs($json);
+    break;
+
+
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
     http_response_code(400); // Bad Request
