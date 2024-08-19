@@ -145,21 +145,18 @@ class User
   }
 
   function getActiveJob()
-{
+  {
     include "connection.php";
-    $sql = "SELECT a.apply_position_id, a.apply_position_name, a.apply_position_status,
-                   IFNULL(COUNT(b.apply_position_id), 0) as Total_Applied
-            FROM tbl_apply_position a
-            LEFT JOIN tbl_position_applied b
-            ON a.apply_position_id = b.apply_position_id
-            GROUP BY a.apply_position_id";
+    $sql = "SELECT a.*, COUNT(b.apply_position_id) as Total_Applied
+              FROM tbl_apply_position a
+              LEFT JOIN tbl_position_applied b
+              ON a.apply_position_id = b.apply_position_id
+              WHERE a.apply_position_status = 1
+              GROUP BY a.apply_position_id ";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
-
-    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    return json_encode($result);
-}
+    return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
+  }
 
 
 
