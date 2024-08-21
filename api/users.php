@@ -4,18 +4,83 @@ include "headers.php";
 
 class User
 {
+  // function login($json)
+  // {
+  //   // {"username":"admin","password":"admin"}
+  //   include "connection.php";
+  //   $json = json_decode($json, true);
+  //   $sql = "SELECT * FROM tbl_personal_information WHERE email = :username  AND BINARY personal_password = :password";
+  //   $stmt = $conn->prepare($sql);
+  //   $stmt->bindParam(':username', $json['username']);
+  //   $stmt->bindParam(':password', $json['password']);
+  //   $stmt->execute();
+  //   return $stmt->rowCount() > 0 ? json_encode($stmt->fetch(PDO::FETCH_ASSOC)) : 0;
+  // }
+
   function login($json)
-  {
-    // {"username":"admin","password":"admin"}
+{
     include "connection.php";
     $json = json_decode($json, true);
-    $sql = "SELECT * FROM tbl_personal_information WHERE email = :username  AND BINARY personal_password = :password";
+
+   
+    $sql = "SELECT * FROM tbl_admin WHERE adm_email = :username AND BINARY adm_password = :password";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':username', $json['username']);
     $stmt->bindParam(':password', $json['password']);
     $stmt->execute();
-    return $stmt->rowCount() > 0 ? json_encode($stmt->fetch(PDO::FETCH_ASSOC)) : 0;
-  }
+
+    if ($stmt->rowCount() > 0) {
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        return json_encode([
+            'adm_id' => $user['adm_id'],
+            // 'user_level_id' => $user['user_level_id'],
+            'adm_user_level' => $user['adm_user_level'],
+            'adm_name' => $user['adm_name'],
+            'adm_email' => $user['adm_email']
+        ]);
+    }
+
+
+    $sql = "SELECT * FROM tbl_supervisor WHERE sup_email = :username AND BINARY sup_password = :password";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':username', $json['username']);
+    $stmt->bindParam(':password', $json['password']);
+    $stmt->execute();
+
+    if ($stmt->rowCount() > 0) {
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        return json_encode([
+            'sup_id' => $user['sup_id'],
+            'sup_user_level' => $user['sup_user_level'],
+            'sup_name' => $user['sup_name'],
+            'sup_email' => $user['sup_email']
+        ]);
+    }
+
+
+    $sql = "SELECT * FROM tbl_personal_information WHERE email = :username AND BINARY personal_password = :password";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':username', $json['username']);
+    $stmt->bindParam(':password', $json['password']);
+    $stmt->execute();
+
+    if ($stmt->rowCount() > 0) {
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        return json_encode([
+            'personal_info_id' => $user['personal_info_id'],
+            'first_name' => $user['first_name'],
+            'last_name' => $user['last_name'],
+            'email' => $user['email'],
+            'user_level_id' => 'applicant'
+        ]);
+    }
+
+    return json_encode(null);
+}
+
+
+
+
 
   function signup($json)
   {
