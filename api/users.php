@@ -22,8 +22,8 @@ class User
     include "connection.php";
     $json = json_decode($json, true);
 
-   
-    $sql = "SELECT * FROM tbl_admin WHERE adm_email = :username AND BINARY adm_password = :password";
+
+    $sql = "SELECT * FROM tbladmin WHERE adm_email = :username AND BINARY adm_password = :password";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':username', $json['username']);
     $stmt->bindParam(':password', $json['password']);
@@ -41,7 +41,7 @@ class User
     }
 
 
-    $sql = "SELECT * FROM tbl_supervisor WHERE sup_email = :username AND BINARY sup_password = :password";
+    $sql = "SELECT * FROM tblsupervisor WHERE sup_email = :username AND BINARY sup_password = :password";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':username', $json['username']);
     $stmt->bindParam(':password', $json['password']);
@@ -58,7 +58,7 @@ class User
     }
 
 
-    $sql = "SELECT * FROM tbl_personal_information WHERE email = :username AND BINARY personal_password = :password";
+    $sql = "SELECT * FROM tblcandidates WHERE cand_email = :username AND BINARY cand_password = :password";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':username', $json['username']);
     $stmt->bindParam(':password', $json['password']);
@@ -67,10 +67,10 @@ class User
     if ($stmt->rowCount() > 0) {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         return json_encode([
-            'personal_info_id' => $user['personal_info_id'],
-            'first_name' => $user['first_name'],
-            'last_name' => $user['last_name'],
-            'email' => $user['email'],
+            'cand_id' => $user['cand_id'],
+            'cand_firstname' => $user['cand_firstname'],
+            'cand_lastname' => $user['cand_lastname'],
+            'cand_email' => $user['cand_email'],
             'user_level_id' => 'applicant'
         ]);
     }
@@ -185,7 +185,7 @@ class User
   function getInstitution()
   {
     include "connection.php";
-    $sql = "SELECT * FROM tbl_institution";
+    $sql = "SELECT * FROM tblinstitution";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
     return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
@@ -194,7 +194,7 @@ class User
   function getCourses()
   {
     include "connection.php";
-    $sql = "SELECT * FROM tbl_courses";
+    $sql = "SELECT * FROM tblcourses";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
     return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
@@ -212,12 +212,12 @@ class User
   function getActiveJob()
   {
     include "connection.php";
-    $sql = "SELECT a.*, COUNT(b.apply_position_id) as Total_Applied
-              FROM tbl_apply_position a
-              LEFT JOIN tbl_position_applied b
-              ON a.apply_position_id = b.apply_position_id
-              WHERE a.apply_position_status = 1
-              GROUP BY a.apply_position_id ";
+    $sql = "SELECT a.*, COUNT(b.posA_jobMId ) as Total_Applied
+              FROM tbljobsmaster a
+              LEFT JOIN tblpositionapplied b
+              ON a.jobM_id  = b.posA_jobMId
+              WHERE a.jobM_status = 1
+              GROUP BY a.jobM_id  ";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
     return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
@@ -235,20 +235,20 @@ class User
 
       error_log(print_r($data, true));
 
-      if (!isset($data['personal_info_id'])) {
-        return json_encode(["error" => "personal_info_id not provided"]);
+      if (!isset($data['cand_id'])) {
+        return json_encode(["error" => "cand_id not provided"]);
       }
 
-      $personal_info_id = (int) $data['personal_info_id'];
+      $cand_id = (int) $data['cand_id'];
 
-      $sql = "SELECT a.apply_position_name
-                  FROM tbl_apply_position a
-                  INNER JOIN tbl_position_applied b
-                  ON a.apply_position_id = b.apply_position_id
-                  WHERE b.personal_info_id = :personal_info_id";
+      $sql = "SELECT a.jobM_title
+                  FROM tbljobsmaster a
+                  INNER JOIN tblpositionapplied b
+                  ON a.jobM_id  = b.posA_jobMId
+                  WHERE b.posA_candId  = :cand_id";
 
       $stmt = $conn->prepare($sql);
-      $stmt->bindParam(':personal_info_id', $personal_info_id, PDO::PARAM_INT);
+      $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
       $stmt->execute();
 
       $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
