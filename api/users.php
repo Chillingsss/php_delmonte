@@ -210,18 +210,23 @@ class User
   }
 
   function getActiveJob()
-  {
+{
     include "connection.php";
-    $sql = "SELECT a.*, COUNT(b.posA_jobMId ) as Total_Applied
-              FROM tbljobsmaster a
-              LEFT JOIN tblpositionapplied b
-              ON a.jobM_id  = b.posA_jobMId
-              WHERE a.jobM_status = 1
-              GROUP BY a.jobM_id  ";
+    $sql = "SELECT a.*,
+                   GROUP_CONCAT(DISTINCT c.duties_text SEPARATOR '|') as duties_text,
+                   COUNT(b.posA_jobMId) as Total_Applied
+            FROM tbljobsmaster a
+            LEFT JOIN tblpositionapplied b ON a.jobM_id = b.posA_jobMId
+            LEFT JOIN tbljobsmasterduties c ON a.jobM_id = c.duties_jobId
+            WHERE a.jobM_status = 1
+            GROUP BY a.jobM_id";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
     return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
-  }
+}
+
+
+
 
   function getAppliedJobs()
   {
@@ -241,7 +246,7 @@ class User
 
       $cand_id = (int) $data['cand_id'];
 
-      $sql = "SELECT a.jobM_title
+      $sql = "SELECT a.jobM_title,
                   FROM tbljobsmaster a
                   INNER JOIN tblpositionapplied b
                   ON a.jobM_id  = b.posA_jobMId
