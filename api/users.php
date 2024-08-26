@@ -350,7 +350,11 @@ function getAllDataForDropdownSignup()
           SELECT a.jobM_id, a.jobM_title, a.jobM_description, a.jobM_status,
                  GROUP_CONCAT(DISTINCT c.duties_text SEPARATOR '|') as duties_text,
                  GROUP_CONCAT(DISTINCT d.jeduc_text SEPARATOR '|') as jeduc_text,
-                 GROUP_CONCAT(DISTINCT CONCAT(e.jwork_responsibilities, '|', e.jwork_duration) SEPARATOR '|') as jwork_responsibilities,
+                 GROUP_CONCAT(DISTINCT e.jwork_responsibilities SEPARATOR '|') as jwork_responsibilities,
+                 GROUP_CONCAT(DISTINCT e.jwork_duration SEPARATOR '|') as jwork_duration,
+
+
+
                  GROUP_CONCAT(DISTINCT f.jknow_text SEPARATOR '|') as jknow_text,
                  GROUP_CONCAT(DISTINCT g.jskills_text SEPARATOR '|') as jskills_text,
                  GROUP_CONCAT(DISTINCT h.jtrng_text SEPARATOR '|') as jtrng_text,
@@ -429,6 +433,58 @@ function getAllDataForDropdownSignup()
       return json_encode(["error" => "Database error: " . $e->getMessage()]);
     }
   }
+
+
+  function applyForJob()
+  {
+      include "connection.php";
+
+      // Read JSON input
+      $input = json_decode(file_get_contents('php://input'), true);
+
+      // Check if required parameters are set
+      if (!isset($input['user_id']) || !isset($input['jobId'])) {
+          echo json_encode(["error" => "Missing required parameters"]);
+          return;
+      }
+
+      $user_id = $input['user_id'];
+      $jobId = $input['jobId'];
+
+      // Validate data (e.g., check if jobId exists in tbljobsmaster)
+      $sqlCheckJob = "SELECT jobM_id FROM tbljobsmaster WHERE jobM_id = :jobId";
+      $stmtCheckJob = $conn->prepare($sqlCheckJob);
+      $stmtCheckJob->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+      $stmtCheckJob->execute();
+
+      if ($stmtCheckJob->rowCount() == 0) {
+          echo json_encode(["error" => "Invalid job ID"]);
+          return;
+      }
+
+      $currentDateTime = date('Y-m-d H:i:s');
+
+      $sql = "
+          INSERT INTO tblpositionapplied (posA_candId, posA_jobMId, posA_datetime)
+          VALUES (:user_id, :jobId, :posA_datetime)
+      ";
+
+      try {
+          $stmt = $conn->prepare($sql);
+          $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+          $stmt->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+          $stmt->bindParam(':posA_datetime', $currentDateTime, PDO::PARAM_STR);
+          $stmt->execute();
+
+          // Return a success message
+          echo json_encode(["success" => "Job applied successfully"]);
+      } catch (PDOException $e) {
+          // Handle database errors
+          echo json_encode(["error" => $e->getMessage()]);
+      }
+  }
+
+
 
 
 
@@ -521,6 +577,9 @@ switch ($operation) {
     break;
   case "getAppliedJobs":
     echo $user->getAppliedJobs();
+    break;
+  case "applyForJob":
+    echo $user->applyForJob();
     break;
   case "getPinCode":
     echo $user->getPinCode($json);
