@@ -439,7 +439,7 @@ function getAllDataForDropdownSignup()
   {
       include "connection.php";
 
-      // Read JSON input
+      // Decode JSON input
       $input = json_decode(file_get_contents('php://input'), true);
 
       // Check if required parameters are set
@@ -451,7 +451,7 @@ function getAllDataForDropdownSignup()
       $user_id = $input['user_id'];
       $jobId = $input['jobId'];
 
-      // Validate data (e.g., check if jobId exists in tbljobsmaster)
+      // Validate if the job ID exists in tbljobsmaster
       $sqlCheckJob = "SELECT jobM_id FROM tbljobsmaster WHERE jobM_id = :jobId";
       $stmtCheckJob = $conn->prepare($sqlCheckJob);
       $stmtCheckJob->bindParam(':jobId', $jobId, PDO::PARAM_INT);
@@ -461,6 +461,19 @@ function getAllDataForDropdownSignup()
           echo json_encode(["error" => "Invalid job ID"]);
           return;
       }
+
+      // Check if the user has already applied for the job
+      $sqlCheckApplication = "SELECT posA_id FROM tblpositionapplied WHERE posA_candId = :user_id AND posA_jobMId = :jobId";
+      $stmtCheckApplication = $conn->prepare($sqlCheckApplication);
+      $stmtCheckApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+      $stmtCheckApplication->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+      $stmtCheckApplication->execute();
+
+      if ($stmtCheckApplication->rowCount() > 0) {
+          echo json_encode(["error" => "You have already applied for this job"]);
+          return;
+      }
+
 
       $currentDateTime = date('Y-m-d H:i:s');
 
@@ -476,13 +489,12 @@ function getAllDataForDropdownSignup()
           $stmt->bindParam(':posA_datetime', $currentDateTime, PDO::PARAM_STR);
           $stmt->execute();
 
-          // Return a success message
           echo json_encode(["success" => "Job applied successfully"]);
       } catch (PDOException $e) {
-          // Handle database errors
           echo json_encode(["error" => $e->getMessage()]);
       }
   }
+
 
 
 
