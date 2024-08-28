@@ -342,45 +342,58 @@ function getAllDataForDropdownSignup()
     return $sendEmail->sendEmail($data['emailToSent'], $data['emailSubject'], $data['emailBody']);
   }
 
+
+  // function getCandidatesProfile(){
+  //   include "connection.php";
+
+  //   $sql = "SELECT a.cand_firstname, a.cand_lastname, a.cand_middlename, a.cand_contactNo, a.cand_alternatecontactNo,a.cand_email, a.cand_email, a.cand_alternateEmail, a.cand_presentAddress, a.cand_permanentAddress, a.cand_dateofBirth, a.cand_sex, a.cand_sssNo, a.cand_tinNo, a.cand_philhealthNo, a.cand_pagibigNo, a.cand_password, a.cand_createdDatetime, a.cand_updatedDatetime,
+  //     GROUP_CONCAT(b.educ_name SEPARATOR '|') as educ_name
+
+
+  //   FROM tblcandidates a
+  //   LEFT JOIN tbleducbackground b ON a.cand_id = b.educ_candId
+  //   ";
+  // }
+
+
   function getActiveJob()
   {
       include "connection.php";
 
       $sql = "
-          SELECT a.jobM_id, a.jobM_title, a.jobM_description, a.jobM_status,
-                 GROUP_CONCAT(DISTINCT c.duties_text SEPARATOR '|') as duties_text,
-                 GROUP_CONCAT(DISTINCT d.jeduc_text SEPARATOR '|') as jeduc_text,
-                 GROUP_CONCAT(DISTINCT e.jwork_responsibilities SEPARATOR '|') as jwork_responsibilities,
-                 GROUP_CONCAT(DISTINCT e.jwork_duration SEPARATOR '|') as jwork_duration,
+        SELECT a.jobM_id, a.jobM_title, a.jobM_description, a.jobM_status,
+               DATE_FORMAT(a.jobM_createdAt, '%b %d, %Y %h:%i %p') as jobM_createdAt,
+               GROUP_CONCAT(DISTINCT c.duties_text SEPARATOR '|') as duties_text,
+               GROUP_CONCAT(DISTINCT d.jeduc_text SEPARATOR '|') as jeduc_text,
+               GROUP_CONCAT(DISTINCT e.jwork_responsibilities SEPARATOR '|') as jwork_responsibilities,
+               GROUP_CONCAT(DISTINCT e.jwork_duration SEPARATOR '|') as jwork_duration,
+               GROUP_CONCAT(DISTINCT f.jknow_text SEPARATOR '|') as jknow_text,
+               GROUP_CONCAT(DISTINCT g.jskills_text SEPARATOR '|') as jskills_text,
+               GROUP_CONCAT(DISTINCT h.jtrng_text SEPARATOR '|') as jtrng_text,
+               (SELECT COUNT(*)
+                FROM tblpositionapplied b
+                WHERE b.posA_jobMId = a.jobM_id) as Total_Applied
+        FROM tbljobsmaster a
+        LEFT JOIN tbljobsmasterduties c ON a.jobM_id = c.duties_jobId
+        LEFT JOIN tbljobseducation d ON a.jobM_id = d.jeduc_jobId
+        LEFT JOIN tbljobsworkexperience e ON a.jobM_id = e.jwork_jobId
+        LEFT JOIN tbljobsknowledge f ON a.jobM_id = f.jknow_jobId
+        LEFT JOIN tbljobsskills g ON a.jobM_id = g.jskills_jobId
+        LEFT JOIN tbljobstrainings h ON a.jobM_id = h.jtrng_jobId
+        WHERE a.jobM_status = 1
+        GROUP BY a.jobM_id";
 
-
-
-                 GROUP_CONCAT(DISTINCT f.jknow_text SEPARATOR '|') as jknow_text,
-                 GROUP_CONCAT(DISTINCT g.jskills_text SEPARATOR '|') as jskills_text,
-                 GROUP_CONCAT(DISTINCT h.jtrng_text SEPARATOR '|') as jtrng_text,
-                 (SELECT COUNT(*)
-                  FROM tblpositionapplied b
-                  WHERE b.posA_jobMId = a.jobM_id) as Total_Applied
-          FROM tbljobsmaster a
-          LEFT JOIN tbljobsmasterduties c ON a.jobM_id = c.duties_jobId
-          LEFT JOIN tbljobseducation d ON a.jobM_id = d.jeduc_jobId
-          LEFT JOIN tbljobsworkexperience e ON a.jobM_id = e.jwork_jobId
-          LEFT JOIN tbljobsknowledge f ON a.jobM_id = f.jknow_jobId
-          LEFT JOIN tbljobsskills g ON a.jobM_id = g.jskills_jobId
-          LEFT JOIN tbljobstrainings h ON a.jobM_id = h.jtrng_jobId
-          WHERE a.jobM_status = 1
-          GROUP BY a.jobM_id";
 
       try {
           $stmt = $conn->prepare($sql);
           $stmt->execute();
 
           $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-          // Ensure the result is an array before encoding
+
           if (is_array($result)) {
               echo json_encode($result);
           } else {
-              // Return an empty array if no data is found
+
               echo json_encode([]);
           }
       } catch (PDOException $e) {
@@ -439,10 +452,10 @@ function getAllDataForDropdownSignup()
   {
       include "connection.php";
 
-      // Decode JSON input
+
       $input = json_decode(file_get_contents('php://input'), true);
 
-      // Check if required parameters are set
+
       if (!isset($input['user_id']) || !isset($input['jobId'])) {
           echo json_encode(["error" => "Missing required parameters"]);
           return;
@@ -451,7 +464,6 @@ function getAllDataForDropdownSignup()
       $user_id = $input['user_id'];
       $jobId = $input['jobId'];
 
-      // Validate if the job ID exists in tbljobsmaster
       $sqlCheckJob = "SELECT jobM_id FROM tbljobsmaster WHERE jobM_id = :jobId";
       $stmtCheckJob = $conn->prepare($sqlCheckJob);
       $stmtCheckJob->bindParam(':jobId', $jobId, PDO::PARAM_INT);
@@ -462,7 +474,7 @@ function getAllDataForDropdownSignup()
           return;
       }
 
-      // Check if the user has already applied for the job
+
       $sqlCheckApplication = "SELECT posA_id FROM tblpositionapplied WHERE posA_candId = :user_id AND posA_jobMId = :jobId";
       $stmtCheckApplication = $conn->prepare($sqlCheckApplication);
       $stmtCheckApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
