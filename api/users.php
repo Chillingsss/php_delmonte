@@ -368,6 +368,7 @@ function getAllDataForDropdownSignup()
                GROUP_CONCAT(DISTINCT e.jwork_responsibilities SEPARATOR '|') as jwork_responsibilities,
                GROUP_CONCAT(DISTINCT e.jwork_duration SEPARATOR '|') as jwork_duration,
                GROUP_CONCAT(DISTINCT f.jknow_text SEPARATOR '|') as jknow_text,
+               GROUP_CONCAT(DISTINCT i.knowledge_name SEPARATOR '|') as knowledge_name,
                GROUP_CONCAT(DISTINCT g.jskills_text SEPARATOR '|') as jskills_text,
                GROUP_CONCAT(DISTINCT h.jtrng_text SEPARATOR '|') as jtrng_text,
                (SELECT COUNT(*)
@@ -380,6 +381,7 @@ function getAllDataForDropdownSignup()
         LEFT JOIN tbljobsknowledge f ON a.jobM_id = f.jknow_jobId
         LEFT JOIN tbljobsskills g ON a.jobM_id = g.jskills_jobId
         LEFT JOIN tbljobstrainings h ON a.jobM_id = h.jtrng_jobId
+        LEFT JOIN tblknowledge i ON f.jknow_knowledgeId = i.knowledge_id
         WHERE a.jobM_status = 1
         GROUP BY a.jobM_id";
 
