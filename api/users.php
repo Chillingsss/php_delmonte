@@ -184,7 +184,7 @@ function signup($json)
               $stmt->execute();
             }
             if ($stmt->rowCount() > 0) {
-              $sql = "INSERT INTO tblpositionapplied(posA_candId, posA_jobMId, posA_datetime)
+              $sql = "INSERT INTO tblapplications(posA_candId, posA_jobMId, posA_datetime)
                       VALUES (:personal_info_id, :apply_position_id, :created_datetime)";
               $stmt = $conn->prepare($sql);
               $stmt->bindParam(':personal_info_id', $newId);
@@ -372,7 +372,7 @@ function getAllDataForDropdownSignup()
                GROUP_CONCAT(DISTINCT g.jskills_text SEPARATOR '|') as jskills_text,
                GROUP_CONCAT(DISTINCT h.jtrng_text SEPARATOR '|') as jtrng_text,
                (SELECT COUNT(*)
-                FROM tblpositionapplied b
+                FROM tblapplications b
                 WHERE b.posA_jobMId = a.jobM_id) as Total_Applied
         FROM tbljobsmaster a
         LEFT JOIN tbljobsmasterduties c ON a.jobM_id = c.duties_jobId
@@ -428,7 +428,7 @@ function getAllDataForDropdownSignup()
 
       $sql = "SELECT a.jobM_title
                   FROM tbljobsmaster a
-                  INNER JOIN tblpositionapplied b
+                  INNER JOIN tblapplications b
                   ON a.jobM_id  = b.posA_jobMId
                   WHERE b.posA_candId  = :cand_id";
 
@@ -477,7 +477,7 @@ function getAllDataForDropdownSignup()
       }
 
 
-      $sqlCheckApplication = "SELECT posA_id FROM tblpositionapplied WHERE posA_candId = :user_id AND posA_jobMId = :jobId";
+      $sqlCheckApplication = "SELECT posA_id FROM tblapplications WHERE posA_candId = :user_id AND posA_jobMId = :jobId";
       $stmtCheckApplication = $conn->prepare($sqlCheckApplication);
       $stmtCheckApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
       $stmtCheckApplication->bindParam(':jobId', $jobId, PDO::PARAM_INT);
@@ -492,7 +492,7 @@ function getAllDataForDropdownSignup()
       $currentDateTime = date('Y-m-d H:i:s');
 
       $sql = "
-          INSERT INTO tblpositionapplied (posA_candId, posA_jobMId, posA_datetime)
+          INSERT INTO tblapplications (posA_candId, posA_jobMId, posA_datetime)
           VALUES (:user_id, :jobId, :posA_datetime)
       ";
 

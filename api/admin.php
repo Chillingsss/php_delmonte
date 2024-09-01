@@ -100,11 +100,11 @@ class Admin
   function getAllJobs()
   {
     include "connection.php";
-    $sql = "SELECT a.*, COUNT(b.posA_id ) as Total_Applied 
-              FROM tbljobsmaster a  
-              LEFT JOIN tblpositionapplied b 
-              ON a.jobM_id = b.posA_jobMId  
-              GROUP BY a.	jobM_id 
+    $sql = "SELECT a.*, COUNT(b.posA_id ) as Total_Applied
+              FROM tbljobsmaster a
+              LEFT JOIN tblapplications b
+              ON a.jobM_id = b.posA_jobMId
+              GROUP BY a.	jobM_id
               ORDER BY a.jobM_id DESC";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
@@ -192,8 +192,8 @@ class Admin
     $stmt->execute();
     $returnValue["jobExperience"] = $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-    $sql = "SELECT b.cand_id, CONCAT(b.cand_lastname, ', ', b.cand_firstname, ' ', b.cand_middlename) as FullName, a.posA_totalpoints FROM tblpositionapplied a 
-            INNER JOIN tblcandidates b ON a.posA_candId = b.cand_id 
+    $sql = "SELECT b.cand_id, CONCAT(b.cand_lastname, ', ', b.cand_firstname, ' ', b.cand_middlename) as FullName, a.posA_totalpoints FROM tblapplications a
+            INNER JOIN tblcandidates b ON a.posA_candId = b.cand_id
             WHERE a.posA_jobMId = :jobId";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(":jobId", $data['jobId']);
