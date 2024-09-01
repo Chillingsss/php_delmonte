@@ -509,7 +509,51 @@ function getAllDataForDropdownSignup()
       }
   }
 
+  function getCandidateProfile($json)
+  {
+    // {"cand_id": 6}
 
+    //     SELECT  FROM tblcandidates a
+    // INNER JOIN tbleducbackground b ON b.educ_personalId = a.cand_id
+    // INNER JOIN tblemploymenthistory c ON c.empH_candId = a.cand_id
+    // INNER JOIN tblskills d ON d.skills_candId = a.cand_id
+    // INNER JOIN tbltraining
+    include "connection.php";
+    $returnValue = [];
+    $data = json_decode($json, true);
+    $cand_id = $data['cand_id'];
+    $sql = "SELECT * FROM tblcandidates WHERE cand_id = :cand_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->execute();
+    $returnValue["candidateInformation"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+
+    $sql = "SELECT * FROM tbleducbackground WHERE educ_personalId = :cand_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->execute();
+    $returnValue["educationalBackground"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+
+    $sql = "SELECT * FROM tblemploymenthistory WHERE empH_candId = :cand_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->execute();
+    $returnValue["employmentHistory"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+
+    $sql = "SELECT * FROM tblskills WHERE skills_candId = :cand_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->execute();
+    $returnValue["skills"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+
+    $sql = "SELECT * FROM tbltraining WHERE training_candId = :cand_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->execute();
+    $returnValue["training"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+
+    return json_encode($returnValue);
+  }
 
 
 
@@ -622,7 +666,9 @@ switch ($operation) {
   case "getAllDataForDropdownSignup":
     echo $user->getAllDataForDropdownSignup();
     break;
-
+  case "getCandidateProfile":
+    echo $user->getCandidateProfile($json);
+    break;
 
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
