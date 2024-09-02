@@ -184,7 +184,7 @@ function signup($json)
               $stmt->execute();
             }
             if ($stmt->rowCount() > 0) {
-              $sql = "INSERT INTO tblapplications(posA_candId, posA_jobMId, posA_datetime)
+              $sql = "INSERT INTO tblapplications(app_candId, app_jobMId, app_datetime)
                       VALUES (:personal_info_id, :apply_position_id, :created_datetime)";
               $stmt = $conn->prepare($sql);
               $stmt->bindParam(':personal_info_id', $newId);
@@ -373,7 +373,7 @@ function getAllDataForDropdownSignup()
                GROUP_CONCAT(DISTINCT h.jtrng_text SEPARATOR '|') as jtrng_text,
                (SELECT COUNT(*)
                 FROM tblapplications b
-                WHERE b.posA_jobMId = a.jobM_id) as Total_Applied
+                WHERE b.app_jobMId = a.jobM_id) as Total_Applied
         FROM tbljobsmaster a
         LEFT JOIN tbljobsmasterduties c ON a.jobM_id = c.duties_jobId
         LEFT JOIN tbljobseducation d ON a.jobM_id = d.jeduc_jobId
@@ -465,8 +465,8 @@ function getAllDataForDropdownSignup()
         $sql = "SELECT a.jobM_title
                 FROM tbljobsmaster a
                 INNER JOIN tblapplications b
-                ON a.jobM_id  = b.posA_jobMId
-                WHERE b.posA_candId  = :cand_id";
+                ON a.jobM_id  = b.app_jobMId
+                WHERE b.app_candId  = :cand_id";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
@@ -551,59 +551,74 @@ function getAllDataForDropdownSignup()
   // }
 
   function applyForJob()
-  {
-      include "connection.php";
+{
+    include "connection.php";
 
-      if (!isset($_POST['user_id']) || !isset($_POST['jobId'])) {
-          echo json_encode(["error" => "Missing required parameters"]);
-          return;
-      }
+    if (!isset($_POST['user_id']) || !isset($_POST['jobId'])) {
+        echo json_encode(["error" => "Missing required parameters"]);
+        return;
+    }
 
-      $user_id = $_POST['user_id'];
-      $jobId = $_POST['jobId'];
+    $user_id = $_POST['user_id'];
+    $jobId = $_POST['jobId'];
 
-      // Check if the job exists
-      $sqlCheckJob = "SELECT jobM_id FROM tbljobsmaster WHERE jobM_id = :jobId";
-      $stmtCheckJob = $conn->prepare($sqlCheckJob);
-      $stmtCheckJob->bindParam(':jobId', $jobId, PDO::PARAM_INT);
-      $stmtCheckJob->execute();
+    // Check if the job exists
+    $sqlCheckJob = "SELECT jobM_id FROM tbljobsmaster WHERE jobM_id = :jobId";
+    $stmtCheckJob = $conn->prepare($sqlCheckJob);
+    $stmtCheckJob->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+    $stmtCheckJob->execute();
 
-      if ($stmtCheckJob->rowCount() == 0) {
-          echo json_encode(["error" => "Invalid job ID"]);
-          return;
-      }
+    if ($stmtCheckJob->rowCount() == 0) {
+        echo json_encode(["error" => "Invalid job ID"]);
+        return;
+    }
 
-      // Check if the user has already applied for the job
-      $sqlCheckApplication = "SELECT posA_id FROM tblapplications WHERE posA_candId = :user_id AND posA_jobMId = :jobId";
-      $stmtCheckApplication = $conn->prepare($sqlCheckApplication);
-      $stmtCheckApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-      $stmtCheckApplication->bindParam(':jobId', $jobId, PDO::PARAM_INT);
-      $stmtCheckApplication->execute();
+    // Check if the user has already applied for the job
+    $sqlCheckApplication = "SELECT app_id FROM tblapplications WHERE app_candId = :user_id AND app_jobMId = :jobId";
+    $stmtCheckApplication = $conn->prepare($sqlCheckApplication);
+    $stmtCheckApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+    $stmtCheckApplication->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+    $stmtCheckApplication->execute();
 
-      if ($stmtCheckApplication->rowCount() > 0) {
-          echo json_encode(["error" => "You have already applied for this job"]);
-          return;
-      }
+    if ($stmtCheckApplication->rowCount() > 0) {
+        echo json_encode(["error" => "You have already applied for this job"]);
+        return;
+    }
 
-      // Insert the application
-      $currentDateTime = date('Y-m-d H:i:s');
-      $sql = "
-          INSERT INTO tblapplications (posA_candId, posA_jobMId, posA_datetime)
-          VALUES (:user_id, :jobId, :posA_datetime)
-      ";
+    // Retrieve the ID for the "Pending" status
+    $sqlGetStatusId = "SELECT appS_id FROM tblapplicationstatus WHERE appS_name = 'Pending'";
+    $stmtGetStatusId = $conn->prepare($sqlGetStatusId);
+    $stmtGetStatusId->execute();
+    $status = $stmtGetStatusId->fetch(PDO::FETCH_ASSOC);
 
-      try {
-          $stmt = $conn->prepare($sql);
-          $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-          $stmt->bindParam(':jobId', $jobId, PDO::PARAM_INT);
-          $stmt->bindParam(':posA_datetime', $currentDateTime, PDO::PARAM_STR);
-          $stmt->execute();
+    if (!$status) {
+        echo json_encode(["error" => "Pending status not found"]);
+        return;
+    }
 
-          echo json_encode(["success" => "Job applied successfully"]);
-      } catch (PDOException $e) {
-          echo json_encode(["error" => $e->getMessage()]);
-      }
-  }
+    $appSId = $status['appS_id'];
+
+    // Insert the application
+    $currentDateTime = date('Y-m-d H:i:s');
+    $sql = "
+        INSERT INTO tblapplications (app_candId, app_jobMId, app_datetime, app_appSId)
+        VALUES (:user_id, :jobId, :app_datetime, :appSId)
+    ";
+
+    try {
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+        $stmt->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+        $stmt->bindParam(':app_datetime', $currentDateTime, PDO::PARAM_STR);
+        $stmt->bindParam(':appSId', $appSId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        echo json_encode(["success" => "Job applied successfully"]);
+    } catch (PDOException $e) {
+        echo json_encode(["error" => $e->getMessage()]);
+    }
+}
+
 
 
   function getCandidateProfile($json) {
