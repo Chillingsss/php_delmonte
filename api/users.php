@@ -408,64 +408,161 @@ function getAllDataForDropdownSignup()
 
 
 
-  function getAppliedJobs()
-  {
+  // function getAppliedJobs()
+  // {
+  //   include "connection.php";
+
+  //   try {
+
+  //     $json = file_get_contents('php://input');
+  //     $data = json_decode($json, true);
+
+
+  //     error_log(print_r($data, true));
+
+  //     if (!isset($data['cand_id'])) {
+  //       return json_encode(["error" => "cand_id not provided"]);
+  //     }
+
+  //     $cand_id = (int) $data['cand_id'];
+
+  //     $sql = "SELECT a.jobM_title
+  //                 FROM tbljobsmaster a
+  //                 INNER JOIN tblapplications b
+  //                 ON a.jobM_id  = b.posA_jobMId
+  //                 WHERE b.posA_candId  = :cand_id";
+
+  //     $stmt = $conn->prepare($sql);
+  //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+  //     $stmt->execute();
+
+  //     $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+  //     if (empty($result)) {
+  //       return json_encode(["error" => "No applied jobs found"]);
+  //     }
+
+  //     return json_encode($result);
+
+  //   } catch (PDOException $e) {
+  //     return json_encode(["error" => "Database error: " . $e->getMessage()]);
+  //   }
+  // }
+
+  function getAppliedJobs() {
     include "connection.php";
 
     try {
+        // Ensure 'cand_id' is provided in the POST request
+        if (!isset($_POST['cand_id'])) {
+            echo json_encode(["error" => "cand_id not provided"]);
+            return;
+        }
 
-      $json = file_get_contents('php://input');
-      $data = json_decode($json, true);
+        $cand_id = (int) $_POST['cand_id'];
 
+        // Prepare the SQL query to fetch applied jobs
+        $sql = "SELECT a.jobM_title
+                FROM tbljobsmaster a
+                INNER JOIN tblapplications b
+                ON a.jobM_id  = b.posA_jobMId
+                WHERE b.posA_candId  = :cand_id";
 
-      error_log(print_r($data, true));
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+        $stmt->execute();
 
-      if (!isset($data['cand_id'])) {
-        return json_encode(["error" => "cand_id not provided"]);
-      }
+        // Fetch the results
+        $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-      $cand_id = (int) $data['cand_id'];
+        // Check if any jobs were found
+        if (empty($result)) {
+            echo json_encode(["error" => "No applied jobs found"]);
+            return;
+        }
 
-      $sql = "SELECT a.jobM_title
-                  FROM tbljobsmaster a
-                  INNER JOIN tblapplications b
-                  ON a.jobM_id  = b.posA_jobMId
-                  WHERE b.posA_candId  = :cand_id";
-
-      $stmt = $conn->prepare($sql);
-      $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      $stmt->execute();
-
-      $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      if (empty($result)) {
-        return json_encode(["error" => "No applied jobs found"]);
-      }
-
-      return json_encode($result);
+        // Return the results as JSON
+        echo json_encode($result);
 
     } catch (PDOException $e) {
-      return json_encode(["error" => "Database error: " . $e->getMessage()]);
+        // Return any database errors
+        echo json_encode(["error" => "Database error: " . $e->getMessage()]);
     }
-  }
+}
 
+
+  // function applyForJob()
+  // {
+  //     include "connection.php";
+
+
+  //     $input = json_decode(file_get_contents('php://input'), true);
+
+
+  //     if (!isset($input['user_id']) || !isset($input['jobId'])) {
+  //         echo json_encode(["error" => "Missing required parameters"]);
+  //         return;
+  //     }
+
+  //     $user_id = $input['user_id'];
+  //     $jobId = $input['jobId'];
+
+  //     $sqlCheckJob = "SELECT jobM_id FROM tbljobsmaster WHERE jobM_id = :jobId";
+  //     $stmtCheckJob = $conn->prepare($sqlCheckJob);
+  //     $stmtCheckJob->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+  //     $stmtCheckJob->execute();
+
+  //     if ($stmtCheckJob->rowCount() == 0) {
+  //         echo json_encode(["error" => "Invalid job ID"]);
+  //         return;
+  //     }
+
+
+  //     $sqlCheckApplication = "SELECT posA_id FROM tblapplications WHERE posA_candId = :user_id AND posA_jobMId = :jobId";
+  //     $stmtCheckApplication = $conn->prepare($sqlCheckApplication);
+  //     $stmtCheckApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+  //     $stmtCheckApplication->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+  //     $stmtCheckApplication->execute();
+
+  //     if ($stmtCheckApplication->rowCount() > 0) {
+  //         echo json_encode(["error" => "You have already applied for this job"]);
+  //         return;
+  //     }
+
+
+  //     $currentDateTime = date('Y-m-d H:i:s');
+
+  //     $sql = "
+  //         INSERT INTO tblapplications (posA_candId, posA_jobMId, posA_datetime)
+  //         VALUES (:user_id, :jobId, :posA_datetime)
+  //     ";
+
+  //     try {
+  //         $stmt = $conn->prepare($sql);
+  //         $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+  //         $stmt->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+  //         $stmt->bindParam(':posA_datetime', $currentDateTime, PDO::PARAM_STR);
+  //         $stmt->execute();
+
+  //         echo json_encode(["success" => "Job applied successfully"]);
+  //     } catch (PDOException $e) {
+  //         echo json_encode(["error" => $e->getMessage()]);
+  //     }
+  // }
 
   function applyForJob()
   {
       include "connection.php";
 
-
-      $input = json_decode(file_get_contents('php://input'), true);
-
-
-      if (!isset($input['user_id']) || !isset($input['jobId'])) {
+      if (!isset($_POST['user_id']) || !isset($_POST['jobId'])) {
           echo json_encode(["error" => "Missing required parameters"]);
           return;
       }
 
-      $user_id = $input['user_id'];
-      $jobId = $input['jobId'];
+      $user_id = $_POST['user_id'];
+      $jobId = $_POST['jobId'];
 
+      // Check if the job exists
       $sqlCheckJob = "SELECT jobM_id FROM tbljobsmaster WHERE jobM_id = :jobId";
       $stmtCheckJob = $conn->prepare($sqlCheckJob);
       $stmtCheckJob->bindParam(':jobId', $jobId, PDO::PARAM_INT);
@@ -476,7 +573,7 @@ function getAllDataForDropdownSignup()
           return;
       }
 
-
+      // Check if the user has already applied for the job
       $sqlCheckApplication = "SELECT posA_id FROM tblapplications WHERE posA_candId = :user_id AND posA_jobMId = :jobId";
       $stmtCheckApplication = $conn->prepare($sqlCheckApplication);
       $stmtCheckApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
@@ -488,9 +585,8 @@ function getAllDataForDropdownSignup()
           return;
       }
 
-
+      // Insert the application
       $currentDateTime = date('Y-m-d H:i:s');
-
       $sql = "
           INSERT INTO tblapplications (posA_candId, posA_jobMId, posA_datetime)
           VALUES (:user_id, :jobId, :posA_datetime)
@@ -508,6 +604,7 @@ function getAllDataForDropdownSignup()
           echo json_encode(["error" => $e->getMessage()]);
       }
   }
+
 
   function getCandidateProfile($json)
   {
@@ -614,15 +711,12 @@ function getCurrentDate()
   return $today->format('Y-m-d h:i:s A');
 }
 
-$input = json_decode(file_get_contents('php://input'), true);
+// $input = json_decode(file_get_contents('php://input'), true);
 
 
 
-$operation = isset($input["operation"]) ? $input["operation"] : "0";
-// $operation = isset($input["operation"]) ? $input["operation"] : "0";
-
-
-$json = isset($input["json"]) ? $input["json"] : "0";
+$operation = isset($_POST["operation"]) ? $_POST["operation"] : "0";
+$json = isset($_POST["json"]) ? $_POST["json"] : "0";
 
 $user = new User();
 
