@@ -606,51 +606,56 @@ function getAllDataForDropdownSignup()
   }
 
 
-  function getCandidateProfile($json)
-  {
-    // {"cand_id": 6}
-
-    //     SELECT  FROM tblcandidates a
-    // INNER JOIN tbleducbackground b ON b.educ_personalId = a.cand_id
-    // INNER JOIN tblemploymenthistory c ON c.empH_candId = a.cand_id
-    // INNER JOIN tblskills d ON d.skills_candId = a.cand_id
-    // INNER JOIN tbltraining
+  function getCandidateProfile($json) {
     include "connection.php";
     $returnValue = [];
     $data = json_decode($json, true);
-    $cand_id = $data['cand_id'];
+
+    $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
+
+    // Fetch candidate information
     $sql = "SELECT * FROM tblcandidates WHERE cand_id = :cand_id";
     $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
-    $returnValue["candidateInformation"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+    $returnValue["candidateInformation"] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
+    // Fetch educational background
     $sql = "SELECT * FROM tbleducbackground WHERE educ_personalId = :cand_id";
     $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
-    $returnValue["educationalBackground"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+    $returnValue["educationalBackground"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+    // Fetch employment history
     $sql = "SELECT * FROM tblemploymenthistory WHERE empH_candId = :cand_id";
     $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
-    $returnValue["employmentHistory"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+    $returnValue["employmentHistory"] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
+    // Fetch skills
     $sql = "SELECT * FROM tblskills WHERE skills_candId = :cand_id";
     $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
-    $returnValue["skills"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+    $returnValue["skills"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+    // Fetch training
     $sql = "SELECT * FROM tbltraining WHERE training_candId = :cand_id";
     $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
-    $returnValue["training"] = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
+    $returnValue["training"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    // Debug output
+    error_log("Return Value: " . print_r($returnValue, true));
 
     return json_encode($returnValue);
-  }
+}
+
+
+
 
 
 
