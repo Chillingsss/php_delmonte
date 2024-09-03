@@ -381,7 +381,7 @@ function getAllDataForDropdownSignup()
         LEFT JOIN tbljobsknowledge f ON a.jobM_id = f.jknow_jobId
         LEFT JOIN tbljobsskills g ON a.jobM_id = g.jskills_jobId
         LEFT JOIN tbljobstrainings h ON a.jobM_id = h.jtrng_jobId
-        LEFT JOIN tblknowledge i ON f.jknow_knowledgeId = i.knowledge_id
+        LEFT JOIN tblpersonalknowledge i ON f.jknow_knowledgeId = i.knowledge_id
         WHERE a.jobM_status = 1
         GROUP BY a.jobM_id";
 
@@ -628,42 +628,40 @@ function getAllDataForDropdownSignup()
 
     $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
 
-    // Fetch candidate information
+
     $sql = "SELECT * FROM tblcandidates WHERE cand_id = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
     $returnValue["candidateInformation"] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-    // Fetch educational background
+
     $sql = "SELECT * FROM tbleducbackground WHERE educ_personalId = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
     $returnValue["educationalBackground"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    // Fetch employment history
+
     $sql = "SELECT * FROM tblemploymenthistory WHERE empH_candId = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
-    $returnValue["employmentHistory"] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    $returnValue["employmentHistory"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    // Fetch skills
+
     $sql = "SELECT * FROM tblskills WHERE skills_candId = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
     $returnValue["skills"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    // Fetch training
     $sql = "SELECT * FROM tbltraining WHERE training_candId = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
     $returnValue["training"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    // Debug output
     error_log("Return Value: " . print_r($returnValue, true));
 
     return json_encode($returnValue);
