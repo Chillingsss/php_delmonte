@@ -406,8 +406,6 @@ function getAllDataForDropdownSignup()
 
 
 
-
-
   // function getAppliedJobs()
   // {
   //   include "connection.php";
@@ -636,36 +634,249 @@ function getAllDataForDropdownSignup()
     $returnValue["candidateInformation"] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
 
-    $sql = "SELECT * FROM tbleducbackground WHERE educ_personalId = :cand_id";
+    $sql = "SELECT b.courses_name, c.institution_name, a.educ_dategraduate FROM tblcandeducbackground a
+     INNER JOIN tblcourses b ON a.educ_coursesId = b.courses_id
+     INNER JOIN tblinstitution c ON a.educ_institutionId = c.institution_id
+     WHERE educ_canId = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
     $returnValue["educationalBackground"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 
-    $sql = "SELECT * FROM tblemploymenthistory WHERE empH_candId = :cand_id";
+    $sql = "SELECT * FROM tblcandemploymenthistory
+     WHERE empH_candId = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
     $returnValue["employmentHistory"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 
-    $sql = "SELECT * FROM tblskills WHERE skills_candId = :cand_id";
+    $sql = "SELECT b.perS_name FROM tblcandskills a
+     INNER JOIN tblpersonalskills b ON a.skills_perSId = b.perS_id
+     WHERE skills_candId = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
     $returnValue["skills"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    $sql = "SELECT * FROM tbltraining WHERE training_candId = :cand_id";
+    $sql = "SELECT b.perT_name FROM tblcandtraining a
+     INNER JOIN tblpersonaltraining b ON a.training_perTId = b.perT_id
+     WHERE training_candId = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
     $returnValue["training"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+    $sql = "SELECT b.knowledge_name FROM tblcandknowledge a
+     INNER JOIN tblpersonalknowledge b ON a.canknow_knowledgeId = b.knowledge_id
+     WHERE canknow_canId = :cand_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+    $stmt->execute();
+    $returnValue["knowledge"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+    $sql = "SELECT b.license_master_name, a.license_number FROM tblcandlicense a
+    INNER JOIN tbllicensemaster b ON a.license_masterId = b.license_master_id
+    WHERE license_canId = :cand_id";
+   $stmt = $conn->prepare($sql);
+   $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+   $stmt->execute();
+   $returnValue["license"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
     error_log("Return Value: " . print_r($returnValue, true));
 
     return json_encode($returnValue);
 }
+
+function updateCandidateProfile($json) {
+  include "connection.php";
+  $data = json_decode($json, true);
+
+  // Extract candidate ID from the data
+  $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
+
+  if ($cand_id === 0) {
+      return json_encode(["error" => "Invalid candidate ID"]);
+  }
+
+  try {
+      // Update candidate information
+      if (isset($data['candidateInformation'])) {
+        $candidateInfo = $data['candidateInformation'];
+        $sql = "UPDATE tblcandidates SET
+                cand_firstname = :first_name,
+                cand_lastname = :last_name,
+                cand_email = :email,
+                cand_contactNo = :contact_no,
+                cand_alternatecontactNo = :alternate_contact_no,
+                cand_presentAddress = :present_address,
+                cand_permanentAddress = :permanent_address,
+                cand_dateofBirth = :date_of_birth,
+                cand_sex = :sex,
+                cand_sssNo = :sss_no,
+                cand_tinNo = :tin_no,
+                cand_philhealthNo = :philhealth_no,
+                cand_pagibigNo = :pagibig_no
+                WHERE cand_id = :cand_id";
+
+        $stmt = $conn->prepare($sql);
+
+        $stmt->bindParam(':first_name', $candidateInfo['cand_firstname'], PDO::PARAM_STR);
+        $stmt->bindParam(':last_name', $candidateInfo['cand_lastname'], PDO::PARAM_STR);
+        $stmt->bindParam(':email', $candidateInfo['cand_email'], PDO::PARAM_STR);
+        $stmt->bindParam(':contact_no', $candidateInfo['cand_contactNo'], PDO::PARAM_STR);
+        $stmt->bindParam(':alternate_contact_no', $candidateInfo['cand_alternatecontactNo'], PDO::PARAM_STR);
+        $stmt->bindParam(':present_address', $candidateInfo['cand_presentAddress'], PDO::PARAM_STR);
+        $stmt->bindParam(':permanent_address', $candidateInfo['cand_permanentAddress'], PDO::PARAM_STR);
+        $stmt->bindParam(':date_of_birth', $candidateInfo['cand_dateofBirth'], PDO::PARAM_STR);
+        $stmt->bindParam(':sex', $candidateInfo['cand_sex'], PDO::PARAM_STR);
+        $stmt->bindParam(':sss_no', $candidateInfo['cand_sssNo'], PDO::PARAM_STR);
+        $stmt->bindParam(':tin_no', $candidateInfo['cand_tinNo'], PDO::PARAM_STR);
+        $stmt->bindParam(':philhealth_no', $candidateInfo['cand_philhealthNo'], PDO::PARAM_STR);
+        $stmt->bindParam(':pagibig_no', $candidateInfo['cand_pagibigNo'], PDO::PARAM_STR);
+        $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+
+        $stmt->execute();
+    }
+
+
+      // Update educational background
+    //   if (isset($data['educationalBackground'])) {
+    //     $education = $data['educationalBackground'];
+    //     foreach ($education as $item) {
+    //         if (isset($item['educ_id'])) {
+    //             // Update existing record
+    //             $sql = "UPDATE tblcandeducbackground SET
+    //                     educ_coursesName = :courses_name,
+    //                     educ_institutionName = :institution_name,
+    //                     educ_dategraduate = :dategraduate
+    //                     WHERE educ_id = :educ_id AND educ_canId = :cand_id";
+    //             $stmt = $conn->prepare($sql);
+    //             $stmt->bindParam(':courses_name', $item['courses_name'], PDO::PARAM_STR);
+    //             $stmt->bindParam(':institution_name', $item['institution_name'], PDO::PARAM_STR);
+    //             $stmt->bindParam(':dategraduate', $item['educ_dategraduate'], PDO::PARAM_STR);
+    //             $stmt->bindParam(':educ_id', $item['educ_id'], PDO::PARAM_INT);
+    //             $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+    //             $stmt->execute();
+    //         } else {
+    //             // Insert new record if educ_id is not present
+    //             $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesName, educ_institutionName, educ_dategraduate)
+    //                     VALUES (:cand_id, :courses_name, :institution_name, :dategraduate)";
+    //             $stmt = $conn->prepare($sql);
+    //             $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+    //             $stmt->bindParam(':courses_name', $item['courses_name'], PDO::PARAM_STR);
+    //             $stmt->bindParam(':institution_name', $item['institution_name'], PDO::PARAM_STR);
+    //             $stmt->bindParam(':dategraduate', $item['educ_dategraduate'], PDO::PARAM_STR);
+    //             $stmt->execute();
+    //         }
+    //     }
+    // }
+
+
+      // // Update employment history
+      if (isset($data['employmentHistory'])) {
+        // Clear existing records for the candidate
+        $sql = "DELETE FROM tblcandemploymenthistory WHERE empH_candId = :cand_id";
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+        $stmt->execute();
+
+        foreach ($data['employmentHistory'] as $item) {
+            // Insert new employment history records
+            $sql = "INSERT INTO tblcandemploymenthistory (empH_candId, empH_positionName, empH_companyName, empH_startdate, empH_enddate)
+                    VALUES (:cand_id, :position_name, :company_name, :start_date, :end_date)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+            $stmt->bindParam(':position_name', $item['empH_positionName'], PDO::PARAM_STR);
+            $stmt->bindParam(':company_name', $item['empH_companyName'], PDO::PARAM_STR);
+            $stmt->bindParam(':start_date', $item['empH_startdate'], PDO::PARAM_STR);
+            $stmt->bindParam(':end_date', $item['empH_enddate'], PDO::PARAM_STR);
+            $stmt->execute();
+        }
+    }
+
+
+      // // Update skills
+      // if (isset($data['skills'])) {
+      //     // Clear existing records and reinsert new ones
+      //     $sql = "DELETE FROM tblcandskills WHERE skills_candId = :cand_id";
+      //     $stmt = $conn->prepare($sql);
+      //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+      //     $stmt->execute();
+
+      //     foreach ($data['skills'] as $item) {
+      //         $sql = "INSERT INTO tblcandskills (skills_candId, skills_perSId)
+      //                 VALUES (:cand_id, :perSId)";
+      //         $stmt = $conn->prepare($sql);
+      //         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+      //         $stmt->bindParam(':perSId', $item['perS_id'], PDO::PARAM_INT);
+      //         $stmt->execute();
+      //     }
+      // }
+
+      // // Update training
+      // if (isset($data['training'])) {
+      //     // Clear existing records and reinsert new ones
+      //     $sql = "DELETE FROM tblcandtraining WHERE training_candId = :cand_id";
+      //     $stmt = $conn->prepare($sql);
+      //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+      //     $stmt->execute();
+
+      //     foreach ($data['training'] as $item) {
+      //         $sql = "INSERT INTO tblcandtraining (training_candId, training_perTId)
+      //                 VALUES (:cand_id, :perTId)";
+      //         $stmt = $conn->prepare($sql);
+      //         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+      //         $stmt->bindParam(':perTId', $item['perT_id'], PDO::PARAM_INT);
+      //         $stmt->execute();
+      //     }
+      // }
+
+      // // Update knowledge
+      // if (isset($data['knowledge'])) {
+      //     // Clear existing records and reinsert new ones
+      //     $sql = "DELETE FROM tblcandknowledge WHERE canknow_canId = :cand_id";
+      //     $stmt = $conn->prepare($sql);
+      //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+      //     $stmt->execute();
+
+      //     foreach ($data['knowledge'] as $item) {
+      //         $sql = "INSERT INTO tblcandknowledge (canknow_canId, canknow_knowledgeId)
+      //                 VALUES (:cand_id, :knowledgeId)";
+      //         $stmt = $conn->prepare($sql);
+      //         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+      //         $stmt->bindParam(':knowledgeId', $item['knowledge_id'], PDO::PARAM_INT);
+      //         $stmt->execute();
+      //     }
+      // }
+
+      // // Update license
+      // if (isset($data['license'])) {
+      //     // Clear existing records and reinsert new ones
+      //     $sql = "DELETE FROM tblcandlicense WHERE license_canId = :cand_id";
+      //     $stmt = $conn->prepare($sql);
+      //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+      //     $stmt->execute();
+
+      //     foreach ($data['license'] as $item) {
+      //         $sql = "INSERT INTO tblcandlicense (license_canId, license_masterId, license_number)
+      //                 VALUES (:cand_id, :masterId, :number)";
+      //         $stmt = $conn->prepare($sql);
+      //         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+      //         $stmt->bindParam(':masterId', $item['license_masterId'], PDO::PARAM_INT);
+      //         $stmt->bindParam(':number', $item['license_number'], PDO::PARAM_STR);
+      //         $stmt->execute();
+      //     }
+      // }
+
+      return json_encode(["success" => "Profile updated successfully"]);
+
+  } catch (PDOException $e) {
+      return json_encode(["error" => $e->getMessage()]);
+  }
+}
+
 
 
 
@@ -780,6 +991,9 @@ switch ($operation) {
     break;
   case "getCandidateProfile":
     echo $user->getCandidateProfile($json);
+    break;
+  case "updateCandidateProfile":
+    echo $user->updateCandidateProfile($json);
     break;
 
   default:
