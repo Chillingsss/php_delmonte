@@ -232,10 +232,10 @@ function getCourses()
   return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
 }
 
-function getCourseGraduate()
+function getCourseType()
 {
   include "connection.php";
-  $sql = "SELECT * FROM tblcoursesgraduate";
+  $sql = "SELECT * FROM tblcoursetype";
   $stmt = $conn->prepare($sql);
   $stmt->execute();
   return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
@@ -634,9 +634,11 @@ function getAllDataForDropdownSignup()
     $returnValue["candidateInformation"] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
 
-    $sql = "SELECT b.courses_name, c.institution_name, a.educ_dategraduate FROM tblcandeducbackground a
+    $sql = "SELECT b.courses_name, c.institution_name, a.educ_dategraduate, d.course_categoryName, e.crs_type_name FROM tblcandeducbackground a
      INNER JOIN tblcourses b ON a.educ_coursesId = b.courses_id
      INNER JOIN tblinstitution c ON a.educ_institutionId = c.institution_id
+     INNER JOIN tblcoursescategory d ON b.courses_coursecategoryId = d.course_categoryId
+     INNER JOIN tblcoursetype e ON b.courses_courseTypeId = e.crs_type_id
      WHERE educ_canId = :cand_id";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
@@ -772,6 +774,63 @@ function updateCandidateProfile($json) {
     //         }
     //     }
     // }
+
+  //   if (isset($data['educationalBackground'])) {
+  //     $education = $data['educationalBackground'];
+  //     foreach ($education as $item) {
+
+  //         if (!isset($item['courses_id'])) {
+  //             echo json_encode(['error' => 'Course ID is missing']);
+  //             continue;
+  //         }
+
+
+  //         $courseId = $item['courses_id'];
+  //         $sql = "SELECT courses_courseTypeId
+  //                 FROM tblcourses
+  //                 WHERE courses_id = :courses_id";
+  //         $stmt = $conn->prepare($sql);
+  //         $stmt->bindParam(':courses_id', $courseId, PDO::PARAM_INT);
+  //         $stmt->execute();
+  //         $courseDetails = $stmt->fetch(PDO::FETCH_ASSOC);
+
+  //         if ($courseDetails) {
+  //             $courseTypeId = $courseDetails['courses_courseTypeId'];
+  //             // $courseCategoryId = $courseDetails['courses_courseCategoryId'];
+
+  //             if (isset($item['educ_back_id']) && !empty($item['educ_back_id'])) {
+
+  //                 $sql = "UPDATE tblcandeducbackground SET
+  //                         educ_coursesId = :courses_id,
+  //                         educ_institutionId = :institution_id,
+  //                         educ_dategraduate = :dategraduate
+  //                         WHERE educ_back_id = :educ_back_id AND educ_canId = :cand_id";
+  //                 $stmt = $conn->prepare($sql);
+  //                 $stmt->bindParam(':courses_id', $item['courses_id'], PDO::PARAM_INT);
+  //                 $stmt->bindParam(':institution_id', $item['institution_id'], PDO::PARAM_INT);
+  //                 $stmt->bindParam(':dategraduate', $item['educ_dategraduate'], PDO::PARAM_STR);
+  //                 $stmt->bindParam(':educ_back_id', $item['educ_back_id'], PDO::PARAM_INT);
+  //                 $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+  //                 $stmt->execute();
+  //             } else {
+
+  //                 echo json_encode(['error' => 'educ_back_id is missing for update']);
+  //                 continue;
+  //             }
+  //         } else {
+
+  //             echo json_encode(['error' => 'Invalid course ID']);
+  //         }
+  //     }
+
+
+  //     echo json_encode(['success' => 'Profile updated successfully']);
+  // }
+
+
+
+
+
 
 
       // // Update employment history
@@ -962,6 +1021,9 @@ switch ($operation) {
   case "getCourses":
     echo $user->getCourses();
     break;
+  case "getCourseType":
+    echo $user->getCourseType();
+    break;
   case "sendEmail":
     echo $user->sendEmail($json);
     break;
@@ -983,9 +1045,7 @@ switch ($operation) {
   case "isEmailExist":
     echo $user->isEmailExist($json);
     break;
-  case "getCourseGraduate":
-    echo $user->getCourseGraduate();
-    break;
+
   case "getAllDataForDropdownSignup":
     echo $user->getAllDataForDropdownSignup();
     break;
