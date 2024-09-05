@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
         'name' => '__root__',
-        'pretty_version' => 'dev-develop',
-        'version' => 'dev-develop',
-        'reference' => '38b72c768bd09177cf45bd3250ed7ad305bab0c1',
+        'pretty_version' => 'dev-phpDelmonte',
+        'version' => 'dev-phpDelmonte',
+        'reference' => 'b4569d99ac65e54419a23c8c0b5b709cad5015dd',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -11,9 +11,9 @@
     ),
     'versions' => array(
         '__root__' => array(
-            'pretty_version' => 'dev-develop',
-            'version' => 'dev-develop',
-            'reference' => '38b72c768bd09177cf45bd3250ed7ad305bab0c1',
+            'pretty_version' => 'dev-phpDelmonte',
+            'version' => 'dev-phpDelmonte',
+            'reference' => 'b4569d99ac65e54419a23c8c0b5b709cad5015dd',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
