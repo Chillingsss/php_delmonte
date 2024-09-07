@@ -256,6 +256,23 @@ function getCourseCategory()
   return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
 }
 
+function getKnowledge(){
+  include "connection.php";
+  $sql = "SELECT * FROM tblpersonalknowledge";
+  $stmt = $conn->prepare($sql);
+  $stmt->execute();
+  return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
+}
+
+function getLicense()
+{
+  include "connection.php";
+  $sql = "SELECT * FROM tbllicensemaster";
+  $stmt = $conn->prepare($sql);
+  $stmt->execute();
+  return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
+}
+
 function getPinCode($json)
 {
   // {"email": "qkyusans@gmail"}
@@ -705,7 +722,7 @@ function isEmailExist($json)
     $stmt->execute();
     $returnValue["training"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    $sql = "SELECT b.knowledge_name FROM tblcandknowledge a
+    $sql = "SELECT b.knowledge_name, a.canknow_id FROM tblcandknowledge a
      INNER JOIN tblpersonalknowledge b ON a.canknow_knowledgeId = b.knowledge_id
      WHERE canknow_canId = :cand_id";
     $stmt = $conn->prepare($sql);
@@ -1099,6 +1116,119 @@ function updateCandidateTraining($json) {
 
 
 
+function updateCandidateKnowledge($json) {
+  include "connection.php";
+  $conn->beginTransaction();
+  try {
+
+      $json = json_decode($json, true);
+      $candidateId = $json['cand_id'] ?? 0;
+      $knowledge = $json['knowledge'] ?? [];
+
+      if (!empty($knowledge)) {
+          foreach ($knowledge as $item) {
+              if (isset($item['canknow_id']) && !empty($item['canknow_id'])) {
+                  $canknow_id = $item['canknow_id'];
+                  $knowledge_id = $item['knowledge_id'];
+
+                  $sql = "SELECT canknow_id FROM tblcandknowledge WHERE canknow_id = :canknow_id";
+                  $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':canknow_id', $canknow_id);
+                  $stmt->execute();
+
+                  if ($stmt->rowCount() > 0) {
+                      // Update existing knowledge
+                      $sql = "UPDATE tblcandknowledge
+                              SET canknow_knowledgeId = :knowledge_id
+                              WHERE canknow_id = :canknow_id";
+                      $stmt = $conn->prepare($sql);
+                      $stmt->bindParam(':knowledge_id', $knowledge_id);
+                      $stmt->bindParam(':canknow_id', $canknow_id);
+                      $stmt->execute();
+                  } else {
+                      // Insert new knowledge
+                      $sql = "INSERT INTO tblcandknowledge (canknow_canId, canknow_knowledgeId)
+                              VALUES (:canknow_canId, :knowledge_id)";
+                      $stmt = $conn->prepare($sql);
+                      $stmt->bindParam(':canknow_canId', $candidateId);
+                      $stmt->bindParam(':knowledge_id', $knowledge_id);
+                      $stmt->execute();
+                  }
+              }
+          }
+      }
+
+      $conn->commit();
+      return 1; // Return success
+  } catch (PDOException $e) {
+      $conn->rollBack();
+      error_log("Error updating knowledge: " . $e->getMessage()); // Log the error for debugging
+      return 0; // Return failure
+  }
+}
+
+
+
+function updateCandidateLicense($json)
+  {
+
+    include "connection.php";
+    $conn->beginTransaction();
+    try {
+      $json = json_decode($json, true);
+      $candidateId = $json['cand_id'] ?? 0;
+      $license = $json['license'] ?? [];
+
+      if (!empty($license)) {
+        foreach ($license as $item) {
+          if (isset($item['license_id']) && !empty($item['license_id'])) {
+
+            $sql = "SELECT license_id FROM tblcandlicense WHERE license_id = :license_id";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':license_id', $item['license_id']);
+            $stmt->execute();
+
+            if ($stmt->rowCount() > 0) {
+
+              $sql = "UPDATE tblcandlicense
+                                  SET license_masterId = :license_masterId,
+                                  license_number = :license_number,
+                                  WHERE license_id = :license_id";
+              $stmt = $conn->prepare($sql);
+              $stmt->bindParam(':license_masterId', $item['license_masterId']);
+              $stmt->bindParam(':license_number', $item['license_number']);
+              $stmt->bindParam(':license_id', $item['license_id']);
+              $stmt->execute();
+            }
+          } else {
+
+            $sql = "INSERT INTO tblcandlicense (license_canId, license_number, license_id)
+                              VALUES (:license_canId, :license_number, :license_id)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':license_canId', $license_canId);
+            $stmt->bindParam(':license_number', $item['license_number']);
+            $stmt->bindParam(':license_id', $item['license_id']);
+            $stmt->execute();
+          }
+        }
+      }
+
+
+      if (isset($stmt) && $stmt->rowCount() > 0) {
+        $conn->commit();
+        return 1;
+      } else {
+        $conn->rollBack();
+        return 0;
+      }
+    } catch (PDOException $th) {
+      $conn->rollBack();
+      return 0;
+    }
+  }
+
+
+
 
 
 
@@ -1210,6 +1340,12 @@ switch ($operation) {
   case "getTraining":
     echo $user->getTraining();
     break;
+  case "getLicense":
+    echo $user->getLicense();
+    break;
+  case "getKnowledge":
+    echo $user->getKnowledge();
+    break;
   case "isEmailExist":
     echo $user->isEmailExist($json);
     break;
@@ -1237,6 +1373,12 @@ switch ($operation) {
     break;
   case "updateCandidateTraining":
     echo $user->updateCandidateTraining($json);
+    break;
+  case "updateCandidateKnowledge":
+    echo $user->updateCandidateKnowledge($json);
+    break;
+  case "updateCandidateLicense":
+    echo $user->updateCandidateLicense($json);
     break;
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
