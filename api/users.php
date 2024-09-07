@@ -722,7 +722,7 @@ function isEmailExist($json)
     $stmt->execute();
     $returnValue["training"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    $sql = "SELECT b.knowledge_name, a.canknow_id FROM tblcandknowledge a
+    $sql = "SELECT b.knowledge_name, a.canknow_id, a.canknow_knowledgeId FROM tblcandknowledge a
      INNER JOIN tblpersonalknowledge b ON a.canknow_knowledgeId = b.knowledge_id
      WHERE canknow_canId = :cand_id";
     $stmt = $conn->prepare($sql);
