@@ -660,7 +660,7 @@ function isEmailExist($json)
     $returnValue["candidateInformation"] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
 
-    $sql = "SELECT b.courses_name, c.institution_name, a.educ_dategraduate, d.course_categoryName, e.crs_type_name FROM tblcandeducbackground a
+    $sql = "SELECT b.courses_name, c.institution_name, a.educ_dategraduate, d.course_categoryName, e.crs_type_name, a.educ_back_id, b.courses_id, c.institution_id FROM tblcandeducbackground a
      INNER JOIN tblcourses b ON a.educ_coursesId = b.courses_id
      INNER JOIN tblinstitution c ON a.educ_institutionId = c.institution_id
      INNER JOIN tblcoursescategory d ON b.courses_coursecategoryId = d.course_categoryId
@@ -954,6 +954,54 @@ function updateEducationalBackground($json)
       return 0;
     }
   }
+
+
+// function updateEducationalBackground($json) {
+//   include "connection.php";
+//   $conn->beginTransaction();
+//   try {
+//     $json = json_decode($json, true);
+//     $candidateId = $json['candidateId'] ?? 0;
+//     $educationalBackground = $json['educationalBackground'] ?? [];
+
+//     if (!empty($educationalBackground)) {
+//       foreach ($educationalBackground as $item) {
+//         if (isset($item['educId']) && !empty($item['educId'])) {
+//           // Update existing record
+//           $sql = "UPDATE tblcandeducbackground
+//                       SET educ_coursesId = :educ_courses_id,
+//                           educ_institutionId = :educ_institution_id,
+//                           educ_dateGraduate = :educ_date_graduate
+//                       WHERE educ_back_id = :educ_back_id";
+//           $stmt = $conn->prepare($sql);
+//           $stmt->bindParam(':educ_courses_id', $item['courseId']);
+//           $stmt->bindParam(':educ_institution_id', $item['institutionId']);
+//           $stmt->bindParam(':educ_date_graduate', $item['courseDateGraduated']);
+//           $stmt->bindParam(':educ_back_id', $item['educId']);
+//           $stmt->execute();
+//         } else {
+//           // Insert new record
+//           $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesId, educ_institutionId, educ_dateGraduate)
+//                     VALUES (:candidate_id, :educ_courses_id, :educ_institution_id, :educ_date_graduate)";
+//           $stmt = $conn->prepare($sql);
+//           $stmt->bindParam(':candidate_id', $candidateId);
+//           $stmt->bindParam(':educ_courses_id', $item['courseId']);
+//           $stmt->bindParam(':educ_institution_id', $item['institutionId']);
+//           $stmt->bindParam(':educ_date_graduate', $item['courseDateGraduated']);
+//           $stmt->execute();
+//         }
+//       }
+//     }
+
+//     $conn->commit();
+//     return 1;
+//   } catch (PDOException $e) {
+//     $conn->rollBack();
+//     error_log($e->getMessage()); // Log the error for debugging
+//     return 0;
+//   }
+// }
+
 
 function updateCandidateEmploymentInfo($json){
   include "connection.php";
