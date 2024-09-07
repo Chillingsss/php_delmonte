@@ -697,7 +697,7 @@ function isEmailExist($json)
     $stmt->execute();
     $returnValue["skills"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    $sql = "SELECT b.perT_name, a.training_id FROM tblcandtraining a
+    $sql = "SELECT b.perT_name, a.training_id, b.perT_id, a.training_perTId FROM tblcandtraining a
      INNER JOIN tblpersonaltraining b ON a.training_perTId = b.perT_id
      WHERE training_candId = :cand_id";
     $stmt = $conn->prepare($sql);
@@ -1049,47 +1049,54 @@ function updateCandidateTraining($json) {
   include "connection.php";
   $conn->beginTransaction();
   try {
-    $json = json_decode($json, true);
-    $candidateId = $json['cand_id'] ?? 0;
-    $trainings = $json['trainings'] ?? [];
+      // Decode JSON
+      $json = json_decode($json, true);
+      $candidateId = $json['cand_id'] ?? 0;
+      $trainings = $json['training'] ?? []; // Change to 'training' to match frontend data structure
 
-    if (!empty($trainings)) {
-      foreach ($trainings as $item) {
-        if (isset($item['training_id']) && !empty($item['training_id'])) {
+      if (!empty($trainings)) {
+          foreach ($trainings as $item) {
+              if (isset($item['training_id']) && !empty($item['training_id'])) {
+                  $trainingId = $item['training_id'];
+                  $perTId = $item['perT_id']; // Use 'perT_id' to match frontend data
 
-          $sql = "SELECT training_id FROM tblcandtraining WHERE training_id = :training_id";
-          $stmt = $conn->prepare($sql);
-          $stmt->bindParam(':training_id', $item['training_id']);
-          $stmt->execute();
+                  // Check if training exists
+                  $sql = "SELECT training_id FROM tblcandtraining WHERE training_id = :training_id";
+                  $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':training_id', $trainingId);
+                  $stmt->execute();
 
-          if ($stmt->rowCount() > 0) {
-            $sql = "UPDATE tblcandtraining
-                    SET training_perTId = :training_perTId
-                    WHERE training_id = :training_id";
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':training_perTId', $item['training_perTId']);
-            $stmt->bindParam(':training_id', $item['training_id']);
-            $stmt->execute();
-          } else {
-            $sql = "INSERT INTO tblcandtraining (training_candId, training_perTId)
-                    VALUES (:training_candId, :training_perTId)";
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':training_candId', $candidateId);
-            $stmt->bindParam(':training_perTId', $item['training_perTId']);
-            $stmt->execute();
+                  if ($stmt->rowCount() > 0) {
+                      // Update existing training
+                      $sql = "UPDATE tblcandtraining
+                              SET training_perTId = :training_perTId
+                              WHERE training_id = :training_id";
+                      $stmt = $conn->prepare($sql);
+                      $stmt->bindParam(':training_perTId', $perTId);
+                      $stmt->bindParam(':training_id', $trainingId);
+                      $stmt->execute();
+                  } else {
+                      // Insert new training
+                      $sql = "INSERT INTO tblcandtraining (training_candId, training_perTId)
+                              VALUES (:training_candId, :training_perTId)";
+                      $stmt = $conn->prepare($sql);
+                      $stmt->bindParam(':training_candId', $candidateId);
+                      $stmt->bindParam(':training_perTId', $perTId);
+                      $stmt->execute();
+                  }
+              }
           }
-        }
       }
-    }
 
-    $conn->commit();
-    return 1;
+      $conn->commit();
+      return 1; // Return success
   } catch (PDOException $e) {
-    $conn->rollBack();
-    error_log("Error updating training: " . $e->getMessage()); // Log the error for debugging
-    return 0;
+      $conn->rollBack();
+      error_log("Error updating training: " . $e->getMessage()); // Log the error for debugging
+      return 0; // Return failure
   }
 }
+
 
 
 
