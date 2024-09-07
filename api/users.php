@@ -293,6 +293,15 @@ function getSkills()
   return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
 }
 
+function getTraining()
+{
+  include "connection.php";
+  $sql = "SELECT * FROM tblpersonaltraining";
+  $stmt = $conn->prepare($sql);
+  $stmt->execute();
+  return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
+}
+
 function isEmailExist($json)
   {
     // {"email": "qkyusans@gmail"}
@@ -680,7 +689,7 @@ function isEmailExist($json)
     $returnValue["employmentHistory"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 
-    $sql = "SELECT b.perS_name FROM tblcandskills a
+    $sql = "SELECT b.perS_name, b.perS_id, a.skills_id FROM tblcandskills a
      INNER JOIN tblpersonalskills b ON a.skills_perSId = b.perS_id
      WHERE skills_candId = :cand_id";
     $stmt = $conn->prepare($sql);
@@ -688,7 +697,7 @@ function isEmailExist($json)
     $stmt->execute();
     $returnValue["skills"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    $sql = "SELECT b.perT_name FROM tblcandtraining a
+    $sql = "SELECT b.perT_name, a.training_id FROM tblcandtraining a
      INNER JOIN tblpersonaltraining b ON a.training_perTId = b.perT_id
      WHERE training_candId = :cand_id";
     $stmt = $conn->prepare($sql);
@@ -907,14 +916,14 @@ function updateEducationalBackground($json)
       if (!empty($educationalBackground)) {
         foreach ($educationalBackground as $item) {
           if (isset($item['educId']) && !empty($item['educId'])) {
-            // Check if the educational background with the provided ID exists
+
             $sql = "SELECT educ_back_id FROM tblcandeducbackground WHERE educ_back_id = :educ_back_id";
             $stmt = $conn->prepare($sql);
             $stmt->bindParam(':educ_back_id', $item['educId']);
             $stmt->execute();
 
             if ($stmt->rowCount() > 0) {
-              // If it exists, update the record
+
               $sql = "UPDATE tblcandeducbackground
                                   SET educ_coursesId = :educational_courses_id,
                                       educ_institutionId = :educational_institution_id,
@@ -928,7 +937,7 @@ function updateEducationalBackground($json)
               $stmt->execute();
             }
           } else {
-            // If no ID is provided, insert a new record
+
             $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesId, educ_institutionId, educ_dateGraduate)
                               VALUES (:personal_info_id, :educational_courses_id, :educational_institution_id, :educational_date_graduate)";
             $stmt = $conn->prepare($sql);
@@ -941,7 +950,7 @@ function updateEducationalBackground($json)
         }
       }
 
-      // Only commit if the statements executed successfully
+
       if (isset($stmt) && $stmt->rowCount() > 0) {
         $conn->commit();
         return 1;
@@ -954,53 +963,6 @@ function updateEducationalBackground($json)
       return 0;
     }
   }
-
-
-// function updateEducationalBackground($json) {
-//   include "connection.php";
-//   $conn->beginTransaction();
-//   try {
-//     $json = json_decode($json, true);
-//     $candidateId = $json['candidateId'] ?? 0;
-//     $educationalBackground = $json['educationalBackground'] ?? [];
-
-//     if (!empty($educationalBackground)) {
-//       foreach ($educationalBackground as $item) {
-//         if (isset($item['educId']) && !empty($item['educId'])) {
-//           // Update existing record
-//           $sql = "UPDATE tblcandeducbackground
-//                       SET educ_coursesId = :educ_courses_id,
-//                           educ_institutionId = :educ_institution_id,
-//                           educ_dateGraduate = :educ_date_graduate
-//                       WHERE educ_back_id = :educ_back_id";
-//           $stmt = $conn->prepare($sql);
-//           $stmt->bindParam(':educ_courses_id', $item['courseId']);
-//           $stmt->bindParam(':educ_institution_id', $item['institutionId']);
-//           $stmt->bindParam(':educ_date_graduate', $item['courseDateGraduated']);
-//           $stmt->bindParam(':educ_back_id', $item['educId']);
-//           $stmt->execute();
-//         } else {
-//           // Insert new record
-//           $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesId, educ_institutionId, educ_dateGraduate)
-//                     VALUES (:candidate_id, :educ_courses_id, :educ_institution_id, :educ_date_graduate)";
-//           $stmt = $conn->prepare($sql);
-//           $stmt->bindParam(':candidate_id', $candidateId);
-//           $stmt->bindParam(':educ_courses_id', $item['courseId']);
-//           $stmt->bindParam(':educ_institution_id', $item['institutionId']);
-//           $stmt->bindParam(':educ_date_graduate', $item['courseDateGraduated']);
-//           $stmt->execute();
-//         }
-//       }
-//     }
-
-//     $conn->commit();
-//     return 1;
-//   } catch (PDOException $e) {
-//     $conn->rollBack();
-//     error_log($e->getMessage()); // Log the error for debugging
-//     return 0;
-//   }
-// }
 
 
 function updateCandidateEmploymentInfo($json){
@@ -1035,6 +997,102 @@ function updateCandidateEmploymentInfo($json){
   }
 
 }
+
+function updateCandidateSkills($json) {
+  include "connection.php";
+  $conn->beginTransaction();
+  try {
+    $json = json_decode($json, true);
+    $candidateId = $json['cand_id'] ?? 0;
+    $skills = $json['skills'] ?? [];
+
+    if (!empty($skills)) {
+      foreach ($skills as $item) {
+        if (isset($item['skillId']) && !empty($item['skillId'])) {
+
+          $sql = "SELECT skills_id FROM tblcandskills WHERE skills_id = :skills_id";
+          $stmt = $conn->prepare($sql);
+          $stmt->bindParam(':skills_id', $item['skills_id']);
+          $stmt->execute();
+
+          if ($stmt->rowCount() > 0) {
+
+            $sql = "UPDATE tblcandskills
+                    SET skills_perSId = :skills_perSId
+                    WHERE skills_id = :skills_id";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':skills_perSId', $item['skillId']);
+            $stmt->bindParam(':skills_id', $item['skills_id']);
+            $stmt->execute();
+          }
+        } else {
+
+          $sql = "INSERT INTO tblcandskills (skills_candId, skills_perSId)
+                  VALUES (:skills_candId, :skills_perSId)";
+          $stmt = $conn->prepare($sql);
+          $stmt->bindParam(':skills_candId', $candidateId);
+          $stmt->bindParam(':skills_perSId', $item['skills_perSId']);
+        }
+      }
+    }
+
+    $conn->commit();
+    return 1;
+  } catch (PDOException $e) {
+    $conn->rollBack();
+    error_log("Error updating skills: " . $e->getMessage()); // Log the error for debugging
+    return 0;
+  }
+}
+
+function updateCandidateTraining($json) {
+  include "connection.php";
+  $conn->beginTransaction();
+  try {
+    $json = json_decode($json, true);
+    $candidateId = $json['cand_id'] ?? 0;
+    $trainings = $json['trainings'] ?? [];
+
+    if (!empty($trainings)) {
+      foreach ($trainings as $item) {
+        if (isset($item['training_id']) && !empty($item['training_id'])) {
+
+          $sql = "SELECT training_id FROM tblcandtraining WHERE training_id = :training_id";
+          $stmt = $conn->prepare($sql);
+          $stmt->bindParam(':training_id', $item['training_id']);
+          $stmt->execute();
+
+          if ($stmt->rowCount() > 0) {
+            $sql = "UPDATE tblcandtraining
+                    SET training_perTId = :training_perTId
+                    WHERE training_id = :training_id";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':training_perTId', $item['training_perTId']);
+            $stmt->bindParam(':training_id', $item['training_id']);
+            $stmt->execute();
+          } else {
+            $sql = "INSERT INTO tblcandtraining (training_candId, training_perTId)
+                    VALUES (:training_candId, :training_perTId)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':training_candId', $candidateId);
+            $stmt->bindParam(':training_perTId', $item['training_perTId']);
+            $stmt->execute();
+          }
+        }
+      }
+    }
+
+    $conn->commit();
+    return 1;
+  } catch (PDOException $e) {
+    $conn->rollBack();
+    error_log("Error updating training: " . $e->getMessage()); // Log the error for debugging
+    return 0;
+  }
+}
+
+
+
 
 
 
@@ -1142,6 +1200,9 @@ switch ($operation) {
   case "getSkills":
     echo $user->getSkills();
     break;
+  case "getTraining":
+    echo $user->getTraining();
+    break;
   case "isEmailExist":
     echo $user->isEmailExist($json);
     break;
@@ -1161,10 +1222,15 @@ switch ($operation) {
   case "updateCandidateEmploymentInfo":
     echo $user->updateCandidateEmploymentInfo($json);
     break;
+  case "updateCandidateSkills":
+    echo $user->updateCandidateSkills($json);
+    break;
   case "getCourseCategory":
     echo $user->getCourseCategory();
     break;
-
+  case "updateCandidateTraining":
+    echo $user->updateCandidateTraining($json);
+    break;
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
     http_response_code(400); // Bad Request
