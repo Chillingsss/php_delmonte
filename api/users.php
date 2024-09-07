@@ -689,7 +689,7 @@ function isEmailExist($json)
     $returnValue["employmentHistory"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 
-    $sql = "SELECT b.perS_name, b.perS_id, a.skills_id FROM tblcandskills a
+    $sql = "SELECT b.perS_name, b.perS_id, a.skills_id, a.skills_perSId FROM tblcandskills a
      INNER JOIN tblpersonalskills b ON a.skills_perSId = b.perS_id
      WHERE skills_candId = :cand_id";
     $stmt = $conn->prepare($sql);
