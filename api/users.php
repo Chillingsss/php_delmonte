@@ -730,7 +730,7 @@ function isEmailExist($json)
     $stmt->execute();
     $returnValue["knowledge"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    $sql = "SELECT b.license_master_name, a.license_number, c.license_type_name FROM tblcandlicense a
+    $sql = "SELECT b.license_master_name, a.license_number, c.license_type_name, a.license_id, a.license_masterId FROM tblcandlicense a
     INNER JOIN tbllicensemaster b ON a.license_masterId = b.license_master_id
     INNER JOIN tbllicensetype c ON b.license_master_typeId = c.license_type_id
     WHERE license_canId = :cand_id";
@@ -968,13 +968,10 @@ function updateEducationalBackground($json)
       }
 
 
-      if (isset($stmt) && $stmt->rowCount() > 0) {
+
         $conn->commit();
         return 1;
-      } else {
-        $conn->rollBack();
-        return 0;
-      }
+
     } catch (PDOException $th) {
       $conn->rollBack();
       return 0;
@@ -1170,62 +1167,59 @@ function updateCandidateKnowledge($json) {
 
 
 function updateCandidateLicense($json)
-  {
-
+{
     include "connection.php";
     $conn->beginTransaction();
     try {
-      $json = json_decode($json, true);
-      $candidateId = $json['cand_id'] ?? 0;
-      $license = $json['license'] ?? [];
+        $json = json_decode($json, true);
+        $candidateId = $json['cand_id'] ?? 0;
+        $license = $json['license'] ?? [];
 
-      if (!empty($license)) {
-        foreach ($license as $item) {
-          if (isset($item['license_id']) && !empty($item['license_id'])) {
+        if (!empty($license)) {
+            foreach ($license as $item) {
+                if (isset($item['license_id']) && !empty($item['license_id'])) {
+                    // Check if license exists
+                    $sql = "SELECT license_id FROM tblcandlicense WHERE license_id = :license_id";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(':license_id', $item['license_id'], PDO::PARAM_INT);
+                    $stmt->execute();
 
-            $sql = "SELECT license_id FROM tblcandlicense WHERE license_id = :license_id";
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':license_id', $item['license_id']);
-            $stmt->execute();
+                    if ($stmt->rowCount() > 0) {
 
-            if ($stmt->rowCount() > 0) {
-
-              $sql = "UPDATE tblcandlicense
-                                  SET license_masterId = :license_masterId,
-                                  license_number = :license_number,
-                                  WHERE license_id = :license_id";
-              $stmt = $conn->prepare($sql);
-              $stmt->bindParam(':license_masterId', $item['license_masterId']);
-              $stmt->bindParam(':license_number', $item['license_number']);
-              $stmt->bindParam(':license_id', $item['license_id']);
-              $stmt->execute();
+                        $sql = "UPDATE tblcandlicense
+                                SET license_masterId = :license_masterId,
+                                    license_number = :license_number
+                                WHERE license_id = :license_id";
+                        $stmt = $conn->prepare($sql);
+                        $stmt->bindParam(':license_masterId', $item['license_masterId'], PDO::PARAM_INT);
+                        $stmt->bindParam(':license_number', $item['license_number'], PDO::PARAM_STR);
+                        $stmt->bindParam(':license_id', $item['license_id'], PDO::PARAM_INT);
+                        $stmt->execute();
+                    }
+                } else {
+                    // Insert new license record
+                    $sql = "INSERT INTO tblcandlicense (license_canId, license_masterId, license_number)
+                            VALUES (:license_canId, :license_masterId, :license_number)";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(':license_canId', $candidateId, PDO::PARAM_INT);
+                    $stmt->bindParam(':license_masterId', $item['license_masterId'], PDO::PARAM_INT);
+                    $stmt->bindParam(':license_number', $item['license_number'], PDO::PARAM_STR); // Assuming license number can be alphanumeric
+                    $stmt->execute();
+                }
             }
-          } else {
-
-            $sql = "INSERT INTO tblcandlicense (license_canId, license_number, license_id)
-                              VALUES (:license_canId, :license_number, :license_id)";
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':license_canId', $license_canId);
-            $stmt->bindParam(':license_number', $item['license_number']);
-            $stmt->bindParam(':license_id', $item['license_id']);
-            $stmt->execute();
-          }
         }
-      }
 
 
-      if (isset($stmt) && $stmt->rowCount() > 0) {
-        $conn->commit();
-        return 1;
-      } else {
+            $conn->commit();
+            return 1;
+
+    } catch (PDOException $th) {
         $conn->rollBack();
         return 0;
-      }
-    } catch (PDOException $th) {
-      $conn->rollBack();
-      return 0;
     }
-  }
+}
+
+
 
 
 
