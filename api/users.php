@@ -691,7 +691,8 @@ function isEmailExist($json)
      INNER JOIN tblinstitution c ON a.educ_institutionId = c.institution_id
      INNER JOIN tblcoursescategory d ON b.courses_coursecategoryId = d.course_categoryId
      INNER JOIN tblcoursetype e ON b.courses_courseTypeId = e.crs_type_id
-     WHERE educ_canId = :cand_id";
+     WHERE educ_canId = :cand_id
+     ORDER BY a.educ_back_id DESC";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
@@ -706,9 +707,12 @@ function isEmailExist($json)
     $returnValue["employmentHistory"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 
-    $sql = "SELECT b.perS_name, b.perS_id, a.skills_id, a.skills_perSId FROM tblcandskills a
-     INNER JOIN tblpersonalskills b ON a.skills_perSId = b.perS_id
-     WHERE skills_candId = :cand_id";
+    $sql = "SELECT b.perS_name, b.perS_id, a.skills_id, a.skills_perSId
+        FROM tblcandskills a
+        INNER JOIN tblpersonalskills b ON a.skills_perSId = b.perS_id
+        WHERE skills_candId = :cand_id
+        ORDER BY a.skills_id DESC";
+
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
@@ -716,7 +720,8 @@ function isEmailExist($json)
 
     $sql = "SELECT b.perT_name, a.training_id, b.perT_id, a.training_perTId FROM tblcandtraining a
      INNER JOIN tblpersonaltraining b ON a.training_perTId = b.perT_id
-     WHERE training_candId = :cand_id";
+     WHERE training_candId = :cand_id
+     ORDER BY a.training_id DESC";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
@@ -724,7 +729,8 @@ function isEmailExist($json)
 
     $sql = "SELECT b.knowledge_name, a.canknow_id, a.canknow_knowledgeId FROM tblcandknowledge a
      INNER JOIN tblpersonalknowledge b ON a.canknow_knowledgeId = b.knowledge_id
-     WHERE canknow_canId = :cand_id";
+     WHERE canknow_canId = :cand_id
+     ORDER BY a.canknow_id DESC";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
     $stmt->execute();
@@ -733,7 +739,8 @@ function isEmailExist($json)
     $sql = "SELECT b.license_master_name, a.license_number, c.license_type_name, a.license_id, a.license_masterId FROM tblcandlicense a
     INNER JOIN tbllicensemaster b ON a.license_masterId = b.license_master_id
     INNER JOIN tbllicensetype c ON b.license_master_typeId = c.license_type_id
-    WHERE license_canId = :cand_id";
+    WHERE license_canId = :cand_id
+    ORDER BY a.license_id DESC";
    $stmt = $conn->prepare($sql);
    $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
    $stmt->execute();
@@ -1126,40 +1133,35 @@ function updateCandidateKnowledge($json) {
   include "connection.php";
   $conn->beginTransaction();
   try {
-
+      // Decode JSON
       $json = json_decode($json, true);
       $candidateId = $json['cand_id'] ?? 0;
       $knowledge = $json['knowledge'] ?? [];
 
       if (!empty($knowledge)) {
           foreach ($knowledge as $item) {
-              if (isset($item['canknow_id']) && !empty($item['canknow_id'])) {
-                  $canknow_id = $item['canknow_id'];
-                  $knowledge_id = $item['knowledge_id'];
+              $canknow_id = $item['canknow_id'] ?? null;
+              $knowledge_id = $item['knowledge_id'] ?? null;
 
-                  $sql = "SELECT canknow_id FROM tblcandknowledge WHERE canknow_id = :canknow_id";
+              if ($canknow_id === null) {
+                  // Insert new knowledge if canknow_id is null
+                  $sql = "INSERT INTO tblcandknowledge (canknow_canId, canknow_knowledgeId)
+                          VALUES (:canknow_canId, :knowledge_id)";
                   $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':canknow_canId', $candidateId);
+                  $stmt->bindParam(':knowledge_id', $knowledge_id);
+                  $stmt->execute();
+                  error_log("Knowledge inserted: candId = $candidateId, knowledge_id = $knowledge_id");
+              } else {
+                  // Update existing knowledge if canknow_id is provided
+                  $sql = "UPDATE tblcandknowledge
+                          SET canknow_knowledgeId = :knowledge_id
+                          WHERE canknow_id = :canknow_id";
+                  $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':knowledge_id', $knowledge_id);
                   $stmt->bindParam(':canknow_id', $canknow_id);
                   $stmt->execute();
-
-                  if ($stmt->rowCount() > 0) {
-                      // Update existing knowledge
-                      $sql = "UPDATE tblcandknowledge
-                              SET canknow_knowledgeId = :knowledge_id
-                              WHERE canknow_id = :canknow_id";
-                      $stmt = $conn->prepare($sql);
-                      $stmt->bindParam(':knowledge_id', $knowledge_id);
-                      $stmt->bindParam(':canknow_id', $canknow_id);
-                      $stmt->execute();
-                  } else {
-                      // Insert new knowledge
-                      $sql = "INSERT INTO tblcandknowledge (canknow_canId, canknow_knowledgeId)
-                              VALUES (:canknow_canId, :knowledge_id)";
-                      $stmt = $conn->prepare($sql);
-                      $stmt->bindParam(':canknow_canId', $candidateId);
-                      $stmt->bindParam(':knowledge_id', $knowledge_id);
-                      $stmt->execute();
-                  }
+                  error_log("Knowledge updated: canknow_id = $canknow_id, knowledge_id = $knowledge_id");
               }
           }
       }
@@ -1172,6 +1174,7 @@ function updateCandidateKnowledge($json) {
       return 0; // Return failure
   }
 }
+
 
 
 
