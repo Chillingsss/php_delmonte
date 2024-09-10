@@ -917,6 +917,48 @@ function updateEducationalBackground($json)
   }
 }
 
+function deleteEducationalBackground($json)
+{
+    include "connection.php";
+
+    $conn->beginTransaction();
+    try {
+        $json = json_decode($json, true);
+        $candidateId = $json['candidateId'] ?? 0;
+        $educationalBackground = $json['educationalBackground'] ?? [];
+
+        if (!empty($educationalBackground)) {
+            foreach ($educationalBackground as $item) {
+                if (isset($item['educId']) && !empty($item['educId'])) {
+                    // Check if deleteFlag is set to true
+                    if (isset($item['deleteFlag']) && $item['deleteFlag'] === true) {
+                        // Delete the education record
+                        $sql = "DELETE FROM tblcandeducbackground WHERE educ_canId = :candidateId AND educ_back_id = :educ_back_id";
+                        $stmt = $conn->prepare($sql);
+                        $stmt->bindParam(':candidateId', $candidateId);
+                        $stmt->bindParam(':educ_back_id', $item['educId']);
+                        $stmt->execute();
+
+                        // Check if the deletion was successful
+                        if ($stmt->rowCount() === 0) {
+                            throw new Exception("Failed to delete record with ID: " . $item['educId']);
+                        }
+                    }
+                }
+            }
+        }
+
+        $conn->commit();
+        return 1; // Success
+
+    } catch (Exception $e) {
+        $conn->rollBack();
+        return 0; // Failure
+    }
+}
+
+
+
 
 
 // function updateEducationalBackground($json)
@@ -1414,6 +1456,10 @@ switch ($operation) {
   case "updateCandidateLicense":
     echo $user->updateCandidateLicense($json);
     break;
+  case "deleteEducationalBackground":
+    echo $user->deleteEducationalBackground($json);
+    break;
+
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
     http_response_code(400); // Bad Request
