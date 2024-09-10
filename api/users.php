@@ -875,16 +875,16 @@ function updateEducationalBackground($json)
         if (!empty($educationalBackground)) {
             foreach ($educationalBackground as $item) {
                 if (isset($item['educId']) && !empty($item['educId'])) {
-                    // Check if deleteFlag is set to true
+
                     if (isset($item['deleteFlag']) && $item['deleteFlag'] === true) {
-                        // Delete education record
+
                         $sql = "DELETE FROM tblcandeducbackground WHERE educ_canId = :candidateId AND educ_back_id = :educ_back_id";
                         $stmt = $conn->prepare($sql);
                         $stmt->bindParam(':candidateId', $candidateId);
                         $stmt->bindParam(':educ_back_id', $item['educId']);
                         $stmt->execute();
                     } else {
-                        // Update education record
+
                         $sql = "UPDATE tblcandeducbackground
                                 SET educ_coursesId = :educational_courses_id,
                                     educ_institutionId = :educational_institution_id,
@@ -898,7 +898,7 @@ function updateEducationalBackground($json)
                         $stmt->execute();
                     }
                 } else {
-                    // Insert new education record
+
                     $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesId, educ_institutionId, educ_dateGraduate)
                             VALUES (:personal_info_id, :educational_courses_id, :educational_institution_id, :educational_date_graduate)";
                     $stmt = $conn->prepare($sql);
@@ -1034,46 +1034,64 @@ function deleteEducationalBackground($json)
 // }
 
 
-function updateCandidateEmploymentInfo($json){
-  include "connection.php";
-  $data = json_decode($json, true);
-  $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
+function updateCandidateEmploymentInfo($json)
+{
+    include "connection.php";
+    $data = json_decode($json, true);
+    $cand_id = isset($data['candidateId']) ? (int) $data['candidateId'] : 0;
 
-  try {
-    if (isset($data['employmentHistory'])) {
-      foreach ($data['employmentHistory'] as $item) {
-          $empH_id = isset($item['empH_id']) ? (int) $item['empH_id'] : 0;
+    $conn->beginTransaction();
+    try {
+        if (isset($data['employmentHistory'])) {
+            foreach ($data['employmentHistory'] as $item) {
+                $empH_id = isset($item['empH_id']) ? (int) $item['empH_id'] : 0;
 
-          if ($empH_id > 0) {
+                if (isset($item['deleteFlag']) && $item['deleteFlag'] === true) {
+                    // Delete the employment record
+                    if ($empH_id > 0) {
+                        $sql = "DELETE FROM tblcandemploymenthistory WHERE empH_id = :empH_id AND empH_candId = :cand_id";
+                        $stmt = $conn->prepare($sql);
+                        $stmt->bindParam(':empH_id', $empH_id, PDO::PARAM_INT);
+                        $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+                        $stmt->execute();
+                    }
+                } else {
+                    // Update or insert the employment record
+                    if ($empH_id > 0) {
+                        // Update existing record
+                        $sql = "UPDATE tblcandemploymenthistory
+                                SET empH_positionName = :position_name,
+                                    empH_companyName = :company_name,
+                                    empH_startdate = :start_date,
+                                    empH_enddate = :end_date
+                                WHERE empH_id = :empH_id AND empH_candId = :cand_id";
+                        $stmt = $conn->prepare($sql);
+                        $stmt->bindParam(':empH_id', $empH_id, PDO::PARAM_INT);
+                    } else {
+                        // Insert new record
+                        $sql = "INSERT INTO tblcandemploymenthistory (empH_candId, empH_positionName, empH_companyName, empH_startdate, empH_enddate)
+                                VALUES (:cand_id, :position_name, :company_name, :start_date, :end_date)";
+                        $stmt = $conn->prepare($sql);
+                    }
 
-              $sql = "UPDATE tblcandemploymenthistory
-                      SET empH_positionName = :position_name,
-                          empH_companyName = :company_name,
-                          empH_startdate = :start_date,
-                          empH_enddate = :end_date
-                      WHERE empH_id = :empH_id AND empH_candId = :cand_id";
-              $stmt = $conn->prepare($sql);
-              $stmt->bindParam(':empH_id', $empH_id, PDO::PARAM_INT);
-          } else {
+                    $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+                    $stmt->bindParam(':position_name', $item['empH_positionName'], PDO::PARAM_STR);
+                    $stmt->bindParam(':company_name', $item['empH_companyName'], PDO::PARAM_STR);
+                    $stmt->bindParam(':start_date', $item['empH_startdate'], PDO::PARAM_STR);
+                    $stmt->bindParam(':end_date', $item['empH_enddate'], PDO::PARAM_STR);
+                    $stmt->execute();
+                }
+            }
+        }
 
-              $sql = "INSERT INTO tblcandemploymenthistory (empH_candId, empH_positionName, empH_companyName, empH_startdate, empH_enddate)
-                      VALUES (:cand_id, :position_name, :company_name, :start_date, :end_date)";
-              $stmt = $conn->prepare($sql);
-          }
-
-          $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-          $stmt->bindParam(':position_name', $item['empH_positionName'], PDO::PARAM_STR);
-          $stmt->bindParam(':company_name', $item['empH_companyName'], PDO::PARAM_STR);
-          $stmt->bindParam(':start_date', $item['empH_startdate'], PDO::PARAM_STR);
-          $stmt->bindParam(':end_date', $item['empH_enddate'], PDO::PARAM_STR);
-          $stmt->execute();
-      }
-      return json_encode(["success" => "Employment info updated successfully"]);
+        $conn->commit();
+        return json_encode(["success" => "Employment info updated successfully"]);
+    } catch (PDOException $e) {
+        $conn->rollBack();
+        return json_encode(["error" => $e->getMessage()]);
     }
-  } catch(PDOException $e) {
-    return json_encode(["error" => $e->getMessage()]);
-  }
 }
+
 
 
 function updateCandidateSkills($json) {
@@ -1088,49 +1106,59 @@ function updateCandidateSkills($json) {
           foreach ($skills as $item) {
               $skillId = $item['skillId'] ?? null;
               $skills_id = $item['skills_id'] ?? null;
+              $deleteFlag = $item['deleteFlag'] ?? false;
 
-              if ($skills_id) {
-                  // Check for existing skill association
-                  $sql = "SELECT skills_perSId FROM tblcandskills
-                          WHERE skills_id = :skills_id AND skills_candId = :skills_candId";
+              if ($deleteFlag) {
+                  // Delete the skill record
+                  $sql = "DELETE FROM tblcandskills WHERE skills_id = :skills_id AND skills_candId = :skills_candId";
                   $stmt = $conn->prepare($sql);
                   $stmt->bindParam(':skills_id', $skills_id);
                   $stmt->bindParam(':skills_candId', $candidateId);
                   $stmt->execute();
-
-                  $existingSkill = $stmt->fetchColumn();
-
-                  if ($existingSkill !== $skillId) {
-                      // Update existing skill
-                      $sql = "UPDATE tblcandskills
-                              SET skills_perSId = :skills_perSId
+              } else {
+                  if ($skills_id) {
+                      // Check for existing skill association
+                      $sql = "SELECT skills_perSId FROM tblcandskills
                               WHERE skills_id = :skills_id AND skills_candId = :skills_candId";
                       $stmt = $conn->prepare($sql);
-                      $stmt->bindParam(':skills_perSId', $skillId);
                       $stmt->bindParam(':skills_id', $skills_id);
                       $stmt->bindParam(':skills_candId', $candidateId);
                       $stmt->execute();
-                  }
-              } else {
-                  // Check if the skill already exists for the candidate
-                  $sql = "SELECT skills_id FROM tblcandskills
-                          WHERE skills_candId = :skills_candId AND skills_perSId = :skills_perSId";
-                  $stmt = $conn->prepare($sql);
-                  $stmt->bindParam(':skills_candId', $candidateId);
-                  $stmt->bindParam(':skills_perSId', $skillId);
-                  $stmt->execute();
 
-                  if ($stmt->rowCount() === 0) {
-                      // Skill does not exist, insert new skill
-                      $sql = "INSERT INTO tblcandskills (skills_candId, skills_perSId)
-                              VALUES (:skills_candId, :skills_perSId)";
+                      $existingSkill = $stmt->fetchColumn();
+
+                      if ($existingSkill !== $skillId) {
+                          // Update existing skill
+                          $sql = "UPDATE tblcandskills
+                                  SET skills_perSId = :skills_perSId
+                                  WHERE skills_id = :skills_id AND skills_candId = :skills_candId";
+                          $stmt = $conn->prepare($sql);
+                          $stmt->bindParam(':skills_perSId', $skillId);
+                          $stmt->bindParam(':skills_id', $skills_id);
+                          $stmt->bindParam(':skills_candId', $candidateId);
+                          $stmt->execute();
+                      }
+                  } else {
+                      // Check if the skill already exists for the candidate
+                      $sql = "SELECT skills_id FROM tblcandskills
+                              WHERE skills_candId = :skills_candId AND skills_perSId = :skills_perSId";
                       $stmt = $conn->prepare($sql);
                       $stmt->bindParam(':skills_candId', $candidateId);
                       $stmt->bindParam(':skills_perSId', $skillId);
                       $stmt->execute();
-                  } else {
-                      // Skill already exists for the candidate
-                      return 0; // Indicate that the skill is already associated
+
+                      if ($stmt->rowCount() === 0) {
+                          // Skill does not exist, insert new skill
+                          $sql = "INSERT INTO tblcandskills (skills_candId, skills_perSId)
+                                  VALUES (:skills_candId, :skills_perSId)";
+                          $stmt = $conn->prepare($sql);
+                          $stmt->bindParam(':skills_candId', $candidateId);
+                          $stmt->bindParam(':skills_perSId', $skillId);
+                          $stmt->execute();
+                      } else {
+                          // Skill already exists for the candidate
+                          return 0; // Indicate that the skill is already associated
+                      }
                   }
               }
           }
@@ -1140,10 +1168,11 @@ function updateCandidateSkills($json) {
       return 1;
   } catch (PDOException $e) {
       $conn->rollBack();
-      error_log("Error updating or inserting skills: " . $e->getMessage());
+      error_log("Error updating, inserting, or deleting skills: " . $e->getMessage());
       return 0;
   }
 }
+
 
 
 
