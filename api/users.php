@@ -543,64 +543,6 @@ function isEmailExist($json)
 }
 
 
-  // function applyForJob()
-  // {
-  //     include "connection.php";
-
-
-  //     $input = json_decode(file_get_contents('php://input'), true);
-
-
-  //     if (!isset($input['user_id']) || !isset($input['jobId'])) {
-  //         echo json_encode(["error" => "Missing required parameters"]);
-  //         return;
-  //     }
-
-  //     $user_id = $input['user_id'];
-  //     $jobId = $input['jobId'];
-
-  //     $sqlCheckJob = "SELECT jobM_id FROM tbljobsmaster WHERE jobM_id = :jobId";
-  //     $stmtCheckJob = $conn->prepare($sqlCheckJob);
-  //     $stmtCheckJob->bindParam(':jobId', $jobId, PDO::PARAM_INT);
-  //     $stmtCheckJob->execute();
-
-  //     if ($stmtCheckJob->rowCount() == 0) {
-  //         echo json_encode(["error" => "Invalid job ID"]);
-  //         return;
-  //     }
-
-
-  //     $sqlCheckApplication = "SELECT posA_id FROM tblapplications WHERE posA_candId = :user_id AND posA_jobMId = :jobId";
-  //     $stmtCheckApplication = $conn->prepare($sqlCheckApplication);
-  //     $stmtCheckApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-  //     $stmtCheckApplication->bindParam(':jobId', $jobId, PDO::PARAM_INT);
-  //     $stmtCheckApplication->execute();
-
-  //     if ($stmtCheckApplication->rowCount() > 0) {
-  //         echo json_encode(["error" => "You have already applied for this job"]);
-  //         return;
-  //     }
-
-
-  //     $currentDateTime = date('Y-m-d H:i:s');
-
-  //     $sql = "
-  //         INSERT INTO tblapplications (posA_candId, posA_jobMId, posA_datetime)
-  //         VALUES (:user_id, :jobId, :posA_datetime)
-  //     ";
-
-  //     try {
-  //         $stmt = $conn->prepare($sql);
-  //         $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-  //         $stmt->bindParam(':jobId', $jobId, PDO::PARAM_INT);
-  //         $stmt->bindParam(':posA_datetime', $currentDateTime, PDO::PARAM_STR);
-  //         $stmt->execute();
-
-  //         echo json_encode(["success" => "Job applied successfully"]);
-  //     } catch (PDOException $e) {
-  //         echo json_encode(["error" => $e->getMessage()]);
-  //     }
-  // }
 
   function applyForJob()
 {
@@ -718,7 +660,7 @@ function isEmailExist($json)
     $stmt->execute();
     $returnValue["skills"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-    $sql = "SELECT b.perT_name, a.training_id, b.perT_id, a.training_perTId FROM tblcandtraining a
+    $sql = "SELECT b.perT_name, a.training_id, b.perT_id, a.training_perTId, a.training_image FROM tblcandtraining a
      INNER JOIN tblpersonaltraining b ON a.training_perTId = b.perT_id
      WHERE training_candId = :cand_id
      ORDER BY a.training_id DESC";
@@ -976,6 +918,76 @@ function updateEducationalBackground($json)
 }
 
 
+
+// function updateEducationalBackground($json)
+// {
+//     include "connection.php";
+//     $conn->beginTransaction();
+//     try {
+//         $json = json_decode($json, true);
+//         $candidateId = $json['candidateId'] ?? 0;
+//         $educationalBackground = $json['educationalBackground'] ?? [];
+
+//         foreach ($educationalBackground as $item) {
+//             $courseId = $item['courseId'] ?? null;
+//             $institutionId = $item['institutionId'] ?? null;
+//             $customCourse = $item['customCourse'] ?? null;
+//             $customInstitution = $item['customInstitution'] ?? null;
+
+//             // Insert custom course if necessary
+//             if ($courseId === 'other' && $customCourse) {
+//                 $sql = "INSERT INTO tblcourses (courses_name) VALUES (:course_name)";
+//                 $stmt = $conn->prepare($sql);
+//                 $stmt->bindParam(':course_name', $customCourse);
+//                 $stmt->execute();
+//                 $courseId = $conn->lastInsertId();
+//             }
+
+//             // Insert custom institution if necessary
+//             if ($institutionId === 'other' && $customInstitution) {
+//                 $sql = "INSERT INTO tblinstitutions (institution_name) VALUES (:institution_name)";
+//                 $stmt = $conn->prepare($sql);
+//                 $stmt->bindParam(':institution_name', $customInstitution);
+//                 $stmt->execute();
+//                 $institutionId = $conn->lastInsertId();
+//             }
+
+//             if (isset($item['educId']) && !empty($item['educId'])) {
+//                 // Update existing record
+//                 $sql = "UPDATE tblcandeducbackground
+//                         SET educ_coursesId = :educational_courses_id,
+//                             educ_institutionId = :educational_institution_id,
+//                             educ_dateGraduate = :educational_date_graduate
+//                         WHERE educ_back_id = :educ_back_id";
+//                 $stmt = $conn->prepare($sql);
+//                 $stmt->bindParam(':educational_courses_id', $courseId);
+//                 $stmt->bindParam(':educational_institution_id', $institutionId);
+//                 $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
+//                 $stmt->bindParam(':educ_back_id', $item['educId']);
+//                 $stmt->execute();
+//             } else {
+//                 // Insert new record
+//                 $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesId, educ_institutionId, educ_dateGraduate)
+//                         VALUES (:personal_info_id, :educational_courses_id, :educational_institution_id, :educational_date_graduate)";
+//                 $stmt = $conn->prepare($sql);
+//                 $stmt->bindParam(':personal_info_id', $candidateId);
+//                 $stmt->bindParam(':educational_courses_id', $courseId);
+//                 $stmt->bindParam(':educational_institution_id', $institutionId);
+//                 $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
+//                 $stmt->execute();
+//             }
+//         }
+
+//         $conn->commit();
+//         return 1;
+
+//     } catch (PDOException $th) {
+//         $conn->rollBack();
+//         return 0;
+//     }
+// }
+
+
 function updateCandidateEmploymentInfo($json){
   include "connection.php";
   $data = json_decode($json, true);
@@ -987,7 +999,7 @@ function updateCandidateEmploymentInfo($json){
           $empH_id = isset($item['empH_id']) ? (int) $item['empH_id'] : 0;
 
           if ($empH_id > 0) {
-              // If empH_id exists, perform an UPDATE
+
               $sql = "UPDATE tblcandemploymenthistory
                       SET empH_positionName = :position_name,
                           empH_companyName = :company_name,
@@ -997,7 +1009,7 @@ function updateCandidateEmploymentInfo($json){
               $stmt = $conn->prepare($sql);
               $stmt->bindParam(':empH_id', $empH_id, PDO::PARAM_INT);
           } else {
-              // If empH_id is not provided, perform an INSERT
+
               $sql = "INSERT INTO tblcandemploymenthistory (empH_candId, empH_positionName, empH_companyName, empH_startdate, empH_enddate)
                       VALUES (:cand_id, :position_name, :company_name, :start_date, :end_date)";
               $stmt = $conn->prepare($sql);
@@ -1101,25 +1113,31 @@ function updateCandidateTraining($json) {
           foreach ($trainings as $item) {
               $trainingId = $item['training_id'] ?? null;
               $perTId = $item['perT_id'] ?? null;
-
-              error_log("Processing Training: ID = $trainingId, perTId = $perTId");
+              $imageFileName = $_FILES['image']['name'] ?? null;
 
               if ($trainingId === null) {
                   // Insert new training
-                  $sql = "INSERT INTO tblcandtraining (training_candId, training_perTId) VALUES (:training_candId, :training_perTId)";
+                  $sql = "INSERT INTO tblcandtraining (training_candId, training_perTId, training_image) VALUES (:training_candId, :training_perTId, :training_image)";
                   $stmt = $conn->prepare($sql);
                   $stmt->bindParam(':training_candId', $candidateId);
                   $stmt->bindParam(':training_perTId', $perTId);
+                  $stmt->bindParam(':training_image', $imageFileName);
                   $stmt->execute();
-                  error_log("Training inserted: candId = $candidateId, perTId = $perTId");
               } else {
                   // Update existing training
-                  $sql = "UPDATE tblcandtraining SET training_perTId = :training_perTId WHERE training_id = :training_id";
+                  $sql = "UPDATE tblcandtraining SET training_perTId = :training_perTId, training_image = :training_image WHERE training_id = :training_id";
                   $stmt = $conn->prepare($sql);
                   $stmt->bindParam(':training_perTId', $perTId);
+                  $stmt->bindParam(':training_image', $imageFileName);
                   $stmt->bindParam(':training_id', $trainingId);
                   $stmt->execute();
-                  error_log("Training updated: ID = $trainingId");
+              }
+
+              // Handle image file upload
+              if ($imageFileName) {
+                  $targetDir = "uploads/";
+                  $targetFile = $targetDir . basename($imageFileName);
+                  move_uploaded_file($_FILES['image']['tmp_name'], $targetFile);
               }
           }
       }
@@ -1132,6 +1150,7 @@ function updateCandidateTraining($json) {
       return 0;
   }
 }
+
 
 
 
