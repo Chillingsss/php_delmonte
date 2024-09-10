@@ -865,57 +865,61 @@ function updateCandidatePersonalInfo($json) {
 
 function updateEducationalBackground($json)
 {
-  // {"candidateId": 21, "educationalBackground": [{"educId": 10, "courseId": 25, "institutionId": 1, "courseDateGraduated": "2022-01-01"}]}
-  include "connection.php";
-  $conn->beginTransaction();
-  try {
-    $json = json_decode($json, true);
-    $candidateId = $json['candidateId'] ?? 0;
-    $educationalBackground = $json['educationalBackground'] ?? [];
+    include "connection.php";
+    $conn->beginTransaction();
+    try {
+        $json = json_decode($json, true);
+        $candidateId = $json['candidateId'] ?? 0;
+        $educationalBackground = $json['educationalBackground'] ?? [];
 
-    if (!empty($educationalBackground)) {
-      foreach ($educationalBackground as $item) {
-        if (isset($item['educId']) && !empty($item['educId'])) {
-          $sql = "SELECT educ_back_id FROM tblcandeducbackground WHERE educ_back_id = :educ_back_id";
-          $stmt = $conn->prepare($sql);
-          $stmt->bindParam(':educ_back_id', $item['educId']);
-          $stmt->execute();
-
-          if ($stmt->rowCount() > 0) {
-            $sql = "UPDATE tblcandeducbackground
+        if (!empty($educationalBackground)) {
+            foreach ($educationalBackground as $item) {
+                if (isset($item['educId']) && !empty($item['educId'])) {
+                    // Check if deleteFlag is set to true
+                    if (isset($item['deleteFlag']) && $item['deleteFlag'] === true) {
+                        // Delete education record
+                        $sql = "DELETE FROM tblcandeducbackground WHERE educ_canId = :candidateId AND educ_back_id = :educ_back_id";
+                        $stmt = $conn->prepare($sql);
+                        $stmt->bindParam(':candidateId', $candidateId);
+                        $stmt->bindParam(':educ_back_id', $item['educId']);
+                        $stmt->execute();
+                    } else {
+                        // Update education record
+                        $sql = "UPDATE tblcandeducbackground
                                 SET educ_coursesId = :educational_courses_id,
                                     educ_institutionId = :educational_institution_id,
                                     educ_dateGraduate = :educational_date_graduate
                                 WHERE educ_back_id = :educ_back_id";
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':educational_courses_id', $item['courseId']);
-            $stmt->bindParam(':educational_institution_id', $item['institutionId']);
-            $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
-            $stmt->bindParam(':educ_back_id', $item['educId']);
-            $stmt->execute();
-          }
-        } else {
-          $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesId, educ_institutionId, educ_dateGraduate)
+                        $stmt = $conn->prepare($sql);
+                        $stmt->bindParam(':educational_courses_id', $item['courseId']);
+                        $stmt->bindParam(':educational_institution_id', $item['institutionId']);
+                        $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
+                        $stmt->bindParam(':educ_back_id', $item['educId']);
+                        $stmt->execute();
+                    }
+                } else {
+                    // Insert new education record
+                    $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesId, educ_institutionId, educ_dateGraduate)
                             VALUES (:personal_info_id, :educational_courses_id, :educational_institution_id, :educational_date_graduate)";
-          $stmt = $conn->prepare($sql);
-          $stmt->bindParam(':personal_info_id', $candidateId);
-          $stmt->bindParam(':educational_courses_id', $item['courseId']);
-          $stmt->bindParam(':educational_institution_id', $item['institutionId']);
-          $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
-          $stmt->execute();
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(':personal_info_id', $candidateId);
+                    $stmt->bindParam(':educational_courses_id', $item['courseId']);
+                    $stmt->bindParam(':educational_institution_id', $item['institutionId']);
+                    $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
+                    $stmt->execute();
+                }
+            }
         }
-      }
+
+        $conn->commit();
+        return 1; // Success
+
+    } catch (PDOException $th) {
+        $conn->rollBack();
+        return 0; // Failure
     }
-
-
-      $conn->commit();
-      return 1;
-
-  } catch (PDOException $th) {
-    $conn->rollBack();
-    return 0;
-  }
 }
+
 
 function deleteEducationalBackground($json)
 {
