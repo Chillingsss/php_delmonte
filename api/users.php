@@ -981,19 +981,28 @@ function updateCandidateEmploymentInfo($json){
   $data = json_decode($json, true);
   $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
 
-  try{
+  try {
     if (isset($data['employmentHistory'])) {
-
-      $sql = "DELETE FROM tblcandemploymenthistory WHERE empH_candId = :cand_id";
-      $stmt = $conn->prepare($sql);
-      $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      $stmt->execute();
-
       foreach ($data['employmentHistory'] as $item) {
+          $empH_id = isset($item['empH_id']) ? (int) $item['empH_id'] : 0;
 
-          $sql = "INSERT INTO tblcandemploymenthistory (empH_candId, empH_positionName, empH_companyName, empH_startdate, empH_enddate)
-                  VALUES (:cand_id, :position_name, :company_name, :start_date, :end_date)";
-          $stmt = $conn->prepare($sql);
+          if ($empH_id > 0) {
+              // If empH_id exists, perform an UPDATE
+              $sql = "UPDATE tblcandemploymenthistory
+                      SET empH_positionName = :position_name,
+                          empH_companyName = :company_name,
+                          empH_startdate = :start_date,
+                          empH_enddate = :end_date
+                      WHERE empH_id = :empH_id AND empH_candId = :cand_id";
+              $stmt = $conn->prepare($sql);
+              $stmt->bindParam(':empH_id', $empH_id, PDO::PARAM_INT);
+          } else {
+              // If empH_id is not provided, perform an INSERT
+              $sql = "INSERT INTO tblcandemploymenthistory (empH_candId, empH_positionName, empH_companyName, empH_startdate, empH_enddate)
+                      VALUES (:cand_id, :position_name, :company_name, :start_date, :end_date)";
+              $stmt = $conn->prepare($sql);
+          }
+
           $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
           $stmt->bindParam(':position_name', $item['empH_positionName'], PDO::PARAM_STR);
           $stmt->bindParam(':company_name', $item['empH_companyName'], PDO::PARAM_STR);
@@ -1001,13 +1010,13 @@ function updateCandidateEmploymentInfo($json){
           $stmt->bindParam(':end_date', $item['empH_enddate'], PDO::PARAM_STR);
           $stmt->execute();
       }
-      return json_encode(["success" => "Educational updated successfully"]);
-  }
-  }catch(PDOException $e){
+      return json_encode(["success" => "Employment info updated successfully"]);
+    }
+  } catch(PDOException $e) {
     return json_encode(["error" => $e->getMessage()]);
   }
-
 }
+
 
 function updateCandidateSkills($json) {
   include "connection.php";
