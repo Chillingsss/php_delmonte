@@ -1189,9 +1189,19 @@ function updateCandidateTraining($json) {
               $trainingId = $item['training_id'] ?? null;
               $perTId = $item['perT_id'] ?? null;
               $imageFileName = $_FILES['image']['name'] ?? null;
+              $deleteFlag = $item['deleteFlag'] ?? false;
 
-              if ($trainingId === null) {
-                  // Insert new training
+              if ($deleteFlag && $trainingId) {
+
+                $sql = "DELETE FROM tblcandtraining WHERE training_id = :training_id AND training_candId = :training_candId";
+                $stmt = $conn->prepare($sql);
+                $stmt->bindParam(':training_id', $trainingId);
+                $stmt->bindParam(':training_candId', $candidateId);
+                $stmt->execute();
+            }
+
+              elseif ($trainingId === null) {
+
                   $sql = "INSERT INTO tblcandtraining (training_candId, training_perTId, training_image) VALUES (:training_candId, :training_perTId, :training_image)";
                   $stmt = $conn->prepare($sql);
                   $stmt->bindParam(':training_candId', $candidateId);
@@ -1199,7 +1209,7 @@ function updateCandidateTraining($json) {
                   $stmt->bindParam(':training_image', $imageFileName);
                   $stmt->execute();
               } else {
-                  // Update existing training
+
                   $sql = "UPDATE tblcandtraining SET training_perTId = :training_perTId, training_image = :training_image WHERE training_id = :training_id";
                   $stmt = $conn->prepare($sql);
                   $stmt->bindParam(':training_perTId', $perTId);
@@ -1208,7 +1218,7 @@ function updateCandidateTraining($json) {
                   $stmt->execute();
               }
 
-              // Handle image file upload
+
               if ($imageFileName) {
                   $targetDir = "uploads/";
                   $targetFile = $targetDir . basename($imageFileName);
@@ -1245,9 +1255,20 @@ function updateCandidateKnowledge($json) {
           foreach ($knowledge as $item) {
               $canknow_id = $item['canknow_id'] ?? null;
               $knowledge_id = $item['knowledge_id'] ?? null;
+              $deleteFlag = $item['deleteFlag'] ?? false;
 
-              if ($canknow_id === null) {
-                  // Insert new knowledge if canknow_id is null
+
+              if ($deleteFlag && $canknow_id) {
+
+                $sql = "DELETE FROM tblcandknowledge WHERE canknow_id = :canknow_id AND canknow_canId = :canknow_canId";
+                $stmt = $conn->prepare($sql);
+                $stmt->bindParam(':canknow_id', $canknow_id);
+                $stmt->bindParam(':canknow_canId', $candidateId);
+                $stmt->execute();
+            }
+
+              elseif ($canknow_id === null) {
+
                   $sql = "INSERT INTO tblcandknowledge (canknow_canId, canknow_knowledgeId)
                           VALUES (:canknow_canId, :knowledge_id)";
                   $stmt = $conn->prepare($sql);
@@ -1256,7 +1277,7 @@ function updateCandidateKnowledge($json) {
                   $stmt->execute();
                   error_log("Knowledge inserted: candId = $candidateId, knowledge_id = $knowledge_id");
               } else {
-                  // Update existing knowledge if canknow_id is provided
+
                   $sql = "UPDATE tblcandknowledge
                           SET canknow_knowledgeId = :knowledge_id
                           WHERE canknow_id = :canknow_id";
@@ -1292,47 +1313,49 @@ function updateCandidateLicense($json)
 
         if (!empty($license)) {
             foreach ($license as $item) {
-                if (isset($item['license_id']) && !empty($item['license_id'])) {
-                    // Check if license exists
-                    $sql = "SELECT license_id FROM tblcandlicense WHERE license_id = :license_id";
+                $deleteFlag = $item['deleteFlag'] ?? false;
+                $license_id = $item['license_id'] ?? null;
+
+                // Handle delete operation
+                if ($deleteFlag && $license_id) {
+                    // Delete license record
+                    $sql = "DELETE FROM tblcandlicense WHERE license_id = :license_id AND license_canId = :license_canId";
                     $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(':license_id', $license_id, PDO::PARAM_INT);
+                    $stmt->bindParam(':license_canId', $candidateId, PDO::PARAM_INT);
+                    $stmt->execute();
+                } elseif (isset($item['license_id']) && !empty($item['license_id'])) {
+                    // Update existing license
+                    $sql = "UPDATE tblcandlicense
+                            SET license_masterId = :license_masterId,
+                                license_number = :license_number
+                            WHERE license_id = :license_id";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(':license_masterId', $item['license_masterId'], PDO::PARAM_INT);
+                    $stmt->bindParam(':license_number', $item['license_number'], PDO::PARAM_STR);
                     $stmt->bindParam(':license_id', $item['license_id'], PDO::PARAM_INT);
                     $stmt->execute();
-
-                    if ($stmt->rowCount() > 0) {
-
-                        $sql = "UPDATE tblcandlicense
-                                SET license_masterId = :license_masterId,
-                                    license_number = :license_number
-                                WHERE license_id = :license_id";
-                        $stmt = $conn->prepare($sql);
-                        $stmt->bindParam(':license_masterId', $item['license_masterId'], PDO::PARAM_INT);
-                        $stmt->bindParam(':license_number', $item['license_number'], PDO::PARAM_STR);
-                        $stmt->bindParam(':license_id', $item['license_id'], PDO::PARAM_INT);
-                        $stmt->execute();
-                    }
                 } else {
-                    // Insert new license record
+                    // Insert new license
                     $sql = "INSERT INTO tblcandlicense (license_canId, license_masterId, license_number)
                             VALUES (:license_canId, :license_masterId, :license_number)";
                     $stmt = $conn->prepare($sql);
                     $stmt->bindParam(':license_canId', $candidateId, PDO::PARAM_INT);
                     $stmt->bindParam(':license_masterId', $item['license_masterId'], PDO::PARAM_INT);
-                    $stmt->bindParam(':license_number', $item['license_number'], PDO::PARAM_STR); // Assuming license number can be alphanumeric
+                    $stmt->bindParam(':license_number', $item['license_number'], PDO::PARAM_STR);
                     $stmt->execute();
                 }
             }
         }
 
-
-            $conn->commit();
-            return 1;
-
+        $conn->commit();
+        return 1;
     } catch (PDOException $th) {
         $conn->rollBack();
         return 0;
     }
 }
+
 
 
 
