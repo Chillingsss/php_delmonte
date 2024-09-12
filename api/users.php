@@ -273,14 +273,49 @@ function getLicense()
   return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
 }
 
-function getPinCode($json)
+function getPinCodeUpdate($json)
 {
-  // {"email": "qkyusans@gmail"}
+    // {"email": "qkyusans@gmail.com"}
+    include "connection.php";
+    include "send_email.php";
+
+    $data = json_decode($json, true);
+
+    // Check if the email exists
+    if (!recordExists($data['email'], "tblcandidates", "cand_email")) {
+        // Email doesn't exist, return an error if necessary
+        return json_encode(["error" => "Email not found in the system."]);
+    }
+
+    // Generate a PIN code using parts of the email
+    $firstLetter = strtoupper(substr($data['email'], 0, 1));
+    $thirdLetter = strtoupper(substr($data['email'], 2, 1));
+    $pincode = $firstLetter . rand(100, 999) . $thirdLetter . rand(10000, 99999);
+
+    // Set expiration time (15 minutes from now)
+    $currentDateTime = new DateTime("now", new DateTimeZone('Asia/Manila'));
+    $expirationDateTime = $currentDateTime->add(new DateInterval('PT15M'));
+    $expirationTimestamp = $expirationDateTime->format('Y-m-d H:i:s');
+
+    // Send email with the PIN code
+    $sendEmail = new SendEmail();
+    $sendEmail->sendEmail($data['email'], "$pincode - Your PIN Code", "Please use the following code:<br /><br /> <b>$pincode</b>");
+
+    // Return the generated PIN code and its expiration date
+    return json_encode(["pincode" => $pincode, "expirationDate" => $expirationTimestamp]);
+}
+
+
+function getPinCode($json) {
   include "connection.php";
   include "send_email.php";
 
   $data = json_decode($json, true);
-  if (recordExists($data['email'], "tblcandidates", "cand_email")) return -1;
+
+  // Ensure the email exists in the database
+  if (!recordExists($data['email'], "tblcandidates", "cand_email")) {
+      return json_encode(["error" => "Email not found"]);
+  }
 
   $firstLetter = strtoupper(substr($data['email'], 0, 1));
   $thirdLetter = strtoupper(substr($data['email'], 2, 1));
@@ -290,17 +325,20 @@ function getPinCode($json)
   $expirationDateTime = $currentDateTime->add(new DateInterval('PT15M'));
   $expirationTimestamp = $expirationDateTime->format('Y-m-d H:i:s');
 
-  // $sql = "INSERT INTO tbl_pincode (pin_email, pin_code, pin_expiration_date) VALUES (:email, :pincode, :pin_expiration_date)";
-  // $stmt = $conn->prepare($sql);
-  // $stmt->bindParam(':email', $data['email']);
-  // $stmt->bindParam(':pincode', $pincode);
-  // $stmt->bindParam(':pin_expiration_date', $expirationTimestamp);
-  // $stmt->execute();
+  // Send the PIN code via email
   $sendEmail = new SendEmail();
-  $sendEmail->sendEmail($data['email'], $pincode . " - Your PIN Code", "Please use the following code to complete the first step:<br /><br /> <b>$pincode</b>");
+  $sendEmail->sendEmail($data['email'], $pincode . " - Your PIN Code", "Please use the following code:<br /><br /> <b>$pincode</b>");
 
   return json_encode(["pincode" => $pincode, "expirationDate" => $expirationTimestamp]);
 }
+
+
+
+
+
+
+
+
 function getSkills()
 {
   include "connection.php";
@@ -744,117 +782,6 @@ function updateCandidatePersonalInfo($json) {
         $stmt->execute();
     }
 
-
-      // Update educational background
-    //   if (isset($data['educationalBackground'])) {
-    //     $education = $data['educationalBackground'];
-    //     foreach ($education as $item) {
-    //         if (isset($item['educ_id'])) {
-    //             // Update existing record
-    //             $sql = "UPDATE tblcandeducbackground SET
-    //                     educ_coursesName = :courses_name,
-    //                     educ_institutionName = :institution_name,
-    //                     educ_dategraduate = :dategraduate
-    //                     WHERE educ_id = :educ_id AND educ_canId = :cand_id";
-    //             $stmt = $conn->prepare($sql);
-    //             $stmt->bindParam(':courses_name', $item['courses_name'], PDO::PARAM_STR);
-    //             $stmt->bindParam(':institution_name', $item['institution_name'], PDO::PARAM_STR);
-    //             $stmt->bindParam(':dategraduate', $item['educ_dategraduate'], PDO::PARAM_STR);
-    //             $stmt->bindParam(':educ_id', $item['educ_id'], PDO::PARAM_INT);
-    //             $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-    //             $stmt->execute();
-    //         } else {
-    //             // Insert new record if educ_id is not present
-    //             $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesName, educ_institutionName, educ_dategraduate)
-    //                     VALUES (:cand_id, :courses_name, :institution_name, :dategraduate)";
-    //             $stmt = $conn->prepare($sql);
-    //             $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-    //             $stmt->bindParam(':courses_name', $item['courses_name'], PDO::PARAM_STR);
-    //             $stmt->bindParam(':institution_name', $item['institution_name'], PDO::PARAM_STR);
-    //             $stmt->bindParam(':dategraduate', $item['educ_dategraduate'], PDO::PARAM_STR);
-    //             $stmt->execute();
-    //         }
-    //     }
-    // }
-
-
-
-      // // Update employment history
-
-
-
-      // // Update skills
-      // if (isset($data['skills'])) {
-      //     // Clear existing records and reinsert new ones
-      //     $sql = "DELETE FROM tblcandskills WHERE skills_candId = :cand_id";
-      //     $stmt = $conn->prepare($sql);
-      //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      //     $stmt->execute();
-
-      //     foreach ($data['skills'] as $item) {
-      //         $sql = "INSERT INTO tblcandskills (skills_candId, skills_perSId)
-      //                 VALUES (:cand_id, :perSId)";
-      //         $stmt = $conn->prepare($sql);
-      //         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      //         $stmt->bindParam(':perSId', $item['perS_id'], PDO::PARAM_INT);
-      //         $stmt->execute();
-      //     }
-      // }
-
-      // // Update training
-      // if (isset($data['training'])) {
-      //     // Clear existing records and reinsert new ones
-      //     $sql = "DELETE FROM tblcandtraining WHERE training_candId = :cand_id";
-      //     $stmt = $conn->prepare($sql);
-      //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      //     $stmt->execute();
-
-      //     foreach ($data['training'] as $item) {
-      //         $sql = "INSERT INTO tblcandtraining (training_candId, training_perTId)
-      //                 VALUES (:cand_id, :perTId)";
-      //         $stmt = $conn->prepare($sql);
-      //         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      //         $stmt->bindParam(':perTId', $item['perT_id'], PDO::PARAM_INT);
-      //         $stmt->execute();
-      //     }
-      // }
-
-      // // Update knowledge
-      // if (isset($data['knowledge'])) {
-      //     // Clear existing records and reinsert new ones
-      //     $sql = "DELETE FROM tblcandknowledge WHERE canknow_canId = :cand_id";
-      //     $stmt = $conn->prepare($sql);
-      //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      //     $stmt->execute();
-
-      //     foreach ($data['knowledge'] as $item) {
-      //         $sql = "INSERT INTO tblcandknowledge (canknow_canId, canknow_knowledgeId)
-      //                 VALUES (:cand_id, :knowledgeId)";
-      //         $stmt = $conn->prepare($sql);
-      //         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      //         $stmt->bindParam(':knowledgeId', $item['knowledge_id'], PDO::PARAM_INT);
-      //         $stmt->execute();
-      //     }
-      // }
-
-      // // Update license
-      // if (isset($data['license'])) {
-      //     // Clear existing records and reinsert new ones
-      //     $sql = "DELETE FROM tblcandlicense WHERE license_canId = :cand_id";
-      //     $stmt = $conn->prepare($sql);
-      //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      //     $stmt->execute();
-
-      //     foreach ($data['license'] as $item) {
-      //         $sql = "INSERT INTO tblcandlicense (license_canId, license_masterId, license_number)
-      //                 VALUES (:cand_id, :masterId, :number)";
-      //         $stmt = $conn->prepare($sql);
-      //         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-      //         $stmt->bindParam(':masterId', $item['license_masterId'], PDO::PARAM_INT);
-      //         $stmt->bindParam(':number', $item['license_number'], PDO::PARAM_STR);
-      //         $stmt->execute();
-      //     }
-      // }
 
       return json_encode(["success" => "Profile updated successfully"]);
 
@@ -1356,6 +1283,43 @@ function updateCandidateLicense($json)
     }
 }
 
+function updateEmailPassword($json)
+{
+    include "connection.php";
+    $data = json_decode($json, true);
+
+    $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
+
+    if ($cand_id === 0) {
+        return json_encode(["error" => "Invalid candidate ID"]);
+    }
+
+    try {
+
+        if (isset($data['email']) && isset($data['password'])) {
+            $email = $data['email'];
+            $password = $data['password'];
+
+            $sql = "UPDATE tblcandidates SET
+                    cand_email = :email,
+                    cand_password = :password
+                    WHERE cand_id = :cand_id";
+
+            $stmt = $conn->prepare($sql);
+
+            $stmt->bindParam(':email', $email, PDO::PARAM_STR);
+            $stmt->bindParam(':password', $password, PDO::PARAM_STR);
+            $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+
+            $stmt->execute();
+        }
+
+        return json_encode(["success" => "Email and password updated successfully"]);
+    } catch (PDOException $e) {
+        return json_encode(["error" => $e->getMessage()]);
+    }
+}
+
 
 
 
@@ -1466,6 +1430,10 @@ switch ($operation) {
   case "getPinCode":
     echo $user->getPinCode($json);
     break;
+  case "getPinCodeUpdate":
+    echo $user->getPinCodeUpdate($json);
+    break;
+
   case "getSkills":
     echo $user->getSkills();
     break;
@@ -1514,6 +1482,9 @@ switch ($operation) {
     break;
   case "deleteEducationalBackground":
     echo $user->deleteEducationalBackground($json);
+    break;
+  case "updateEmailPassword":
+    echo $user->updateEmailPassword($json);
     break;
 
   default:
