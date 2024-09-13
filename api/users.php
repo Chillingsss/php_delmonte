@@ -280,16 +280,17 @@ function getPinCodeUpdate($json)
     include "send_email.php";
 
     $data = json_decode($json, true);
+    $email = $data['email'];
 
-    // Check if the email exists
-    if (!recordExists($data['email'], "tblcandidates", "cand_email")) {
+    // Check if the email exists in either the primary or alternate email fields
+    if (!recordExists($email, "tblcandidates", "cand_email, cand_alternateEmail")) {
         // Email doesn't exist, return an error if necessary
         return json_encode(["error" => "Email not found in the system."]);
     }
 
     // Generate a PIN code using parts of the email
-    $firstLetter = strtoupper(substr($data['email'], 0, 1));
-    $thirdLetter = strtoupper(substr($data['email'], 2, 1));
+    $firstLetter = strtoupper(substr($email, 0, 1));
+    $thirdLetter = strtoupper(substr($email, 2, 1));
     $pincode = $firstLetter . rand(100, 999) . $thirdLetter . rand(10000, 99999);
 
     // Set expiration time (15 minutes from now)
@@ -299,11 +300,12 @@ function getPinCodeUpdate($json)
 
     // Send email with the PIN code
     $sendEmail = new SendEmail();
-    $sendEmail->sendEmail($data['email'], "$pincode - Your PIN Code", "Please use the following code:<br /><br /> <b>$pincode</b>");
+    $sendEmail->sendEmail($email, "$pincode - Your PIN Code", "Please use the following code:<br /><br /> <b>$pincode</b>");
 
     // Return the generated PIN code and its expiration date
     return json_encode(["pincode" => $pincode, "expirationDate" => $expirationTimestamp]);
 }
+
 
 
 function getPinCode($json) {
@@ -1336,16 +1338,31 @@ function updateEmailPassword($json)
 
 } //user
 
-function recordExists($value, $table, $column)
+// function recordExists($value, $table, $column)
+// {
+//   include "connection.php";
+//   $sql = "SELECT COUNT(*) FROM $table WHERE $column = :value";
+//   $stmt = $conn->prepare($sql);
+//   $stmt->bindParam(":value", $value);
+//   $stmt->execute();
+//   $count = $stmt->fetchColumn();
+//   return $count > 0;
+// }
+
+function recordExists($value, $table)
 {
-  include "connection.php";
-  $sql = "SELECT COUNT(*) FROM $table WHERE $column = :value";
-  $stmt = $conn->prepare($sql);
-  $stmt->bindParam(":value", $value);
-  $stmt->execute();
-  $count = $stmt->fetchColumn();
-  return $count > 0;
+    include "connection.php";
+
+    // Prepare SQL query to check existence in both cand_email and cand_alternateEmail
+    $sql = "SELECT COUNT(*) FROM $table WHERE cand_email = :value OR cand_alternateEmail = :value";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(":value", $value);
+    $stmt->execute();
+    $count = $stmt->fetchColumn();
+
+    return $count > 0;
 }
+
 
 function uploadImage()
 {
