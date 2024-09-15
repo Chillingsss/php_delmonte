@@ -273,38 +273,85 @@ function getLicense()
   return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
 }
 
+// function getPinCodeUpdate($json)
+// {
+//     // {"email": "qkyusans@gmail.com"}
+//     include "connection.php";
+//     include "send_email.php";
+
+//     $data = json_decode($json, true);
+//     $email = $data['email'];
+
+//     // Check if the email exists in either the primary or alternate email fields
+//     if (!recordExists($email, "tblcandidates", "cand_email, cand_alternateEmail")) {
+//         // Email doesn't exist, return an error if necessary
+//         return json_encode(["error" => "Email not found in the system."]);
+//     }
+
+//     // Generate a PIN code using parts of the email
+//     $firstLetter = strtoupper(substr($email, 0, 1));
+//     $thirdLetter = strtoupper(substr($email, 2, 1));
+//     $pincode = $firstLetter . rand(100, 999) . $thirdLetter . rand(10000, 99999);
+
+//     // Set expiration time (15 minutes from now)
+//     $currentDateTime = new DateTime("now", new DateTimeZone('Asia/Manila'));
+//     $expirationDateTime = $currentDateTime->add(new DateInterval('PT15M'));
+//     $expirationTimestamp = $expirationDateTime->format('Y-m-d H:i:s');
+
+//     // Send email with the PIN code
+//     $sendEmail = new SendEmail();
+//     $sendEmail->sendEmail($email, "$pincode - Your PIN Code", "Please use the following code:<br /><br /> <b>$pincode</b>");
+
+//     // Return the generated PIN code and its expiration date
+//     return json_encode(["pincode" => $pincode, "expirationDate" => $expirationTimestamp]);
+// }
+
 function getPinCodeUpdate($json)
 {
-    // {"email": "qkyusans@gmail.com"}
+
     include "connection.php";
     include "send_email.php";
 
     $data = json_decode($json, true);
     $email = $data['email'];
 
-    // Check if the email exists in either the primary or alternate email fields
-    if (!recordExists($email, "tblcandidates", "cand_email, cand_alternateEmail")) {
-        // Email doesn't exist, return an error if necessary
+
+    $sql = "SELECT cand_id, cand_email, cand_alternateEmail FROM tblcandidates WHERE cand_email = :email OR cand_alternateEmail = :email";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':email', $email, PDO::PARAM_STR);
+    $stmt->execute();
+
+
+    $candidate = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$candidate) {
         return json_encode(["error" => "Email not found in the system."]);
     }
 
-    // Generate a PIN code using parts of the email
+
+    $cand_id = $candidate['cand_id'];
+
+
     $firstLetter = strtoupper(substr($email, 0, 1));
     $thirdLetter = strtoupper(substr($email, 2, 1));
     $pincode = $firstLetter . rand(100, 999) . $thirdLetter . rand(10000, 99999);
 
-    // Set expiration time (15 minutes from now)
+
     $currentDateTime = new DateTime("now", new DateTimeZone('Asia/Manila'));
     $expirationDateTime = $currentDateTime->add(new DateInterval('PT15M'));
     $expirationTimestamp = $expirationDateTime->format('Y-m-d H:i:s');
 
-    // Send email with the PIN code
+
     $sendEmail = new SendEmail();
     $sendEmail->sendEmail($email, "$pincode - Your PIN Code", "Please use the following code:<br /><br /> <b>$pincode</b>");
 
-    // Return the generated PIN code and its expiration date
-    return json_encode(["pincode" => $pincode, "expirationDate" => $expirationTimestamp]);
+    return json_encode([
+        "pincode" => $pincode,
+        "expirationDate" => $expirationTimestamp,
+        "cand_id" => $cand_id
+    ]);
 }
+
 
 
 
@@ -1322,6 +1369,40 @@ function updateEmailPassword($json)
     }
 }
 
+function updatePassword($json)
+{
+    include "connection.php";
+    $data = json_decode($json, true);
+
+    $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
+
+    if ($cand_id === 0) {
+        return json_encode(["error" => "Invalid candidate ID"]);
+    }
+
+    try {
+        if (isset($data['password'])) {
+            $password = $data['password'];
+
+            // Update only the password
+            $sql = "UPDATE tblcandidates SET
+                    cand_password = :password
+                    WHERE cand_id = :cand_id";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':password', $password, PDO::PARAM_STR);
+            $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+
+            $stmt->execute();
+        }
+
+        return json_encode(["success" => "Password updated successfully"]);
+    } catch (PDOException $e) {
+        return json_encode(["error" => $e->getMessage()]);
+    }
+}
+
+
 
 
 
@@ -1503,7 +1584,9 @@ switch ($operation) {
   case "updateEmailPassword":
     echo $user->updateEmailPassword($json);
     break;
-
+  case "updatePassword":
+    echo $user->updatePassword($json);
+    break;
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
     http_response_code(400); // Bad Request
