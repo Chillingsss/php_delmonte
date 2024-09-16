@@ -775,10 +775,95 @@ function isEmailExist($json)
    $stmt->execute();
    $returnValue["license"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+   $sql = "SELECT a.canres_image, a.canres_candId
+     FROM tblcandresume a
+     WHERE canres_candId = :cand_id
+     ORDER BY a.canres_candId DESC";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+    $stmt->execute();
+    $returnValue["resume"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
     error_log("Return Value: " . print_r($returnValue, true));
 
     return json_encode($returnValue);
 }
+
+
+function getCandidateExpectedKeywords($json) {
+  include "connection.php";
+  $returnValue = [];
+  $data = json_decode($json, true);
+
+  // Ensure the candidate ID is provided
+  $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
+
+  if ($cand_id === 0) {
+      return json_encode(["error" => "Invalid candidate ID"]);
+  }
+
+  // Array to store the expected keywords
+  $expectedKeywords = [];
+
+  // Fetch candidate's name
+  $sql = "SELECT cand_firstname, cand_lastname, cand_middlename FROM tblcandidates WHERE cand_id = :cand_id";
+  $stmt = $conn->prepare($sql);
+  $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+  $stmt->execute();
+  $candidateInfo = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+  // Add candidate's full name as keywords
+  if ($candidateInfo) {
+      $fullName = $candidateInfo['cand_firstname'] . ' ' . $candidateInfo['cand_middlename'] . ' ' . $candidateInfo['cand_lastname'];
+      $expectedKeywords[] = $fullName;
+  }
+
+  // Fetch educational background (course names and institution names)
+  $sql = "SELECT b.courses_name, c.institution_name FROM tblcandeducbackground a
+          INNER JOIN tblcourses b ON a.educ_coursesId = b.courses_id
+          INNER JOIN tblinstitution c ON a.educ_institutionId = c.institution_id
+          WHERE a.educ_canId = :cand_id";
+  $stmt = $conn->prepare($sql);
+  $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+  $stmt->execute();
+  $educationalBackground = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+  // Add course names and institution names to the expected keywords
+  $expectedKeywords = array_merge($expectedKeywords, array_column($educationalBackground, 'courses_name'));
+  $expectedKeywords = array_merge($expectedKeywords, array_column($educationalBackground, 'institution_name'));
+
+  // Fetch employment history (company names and position names)
+  $sql = "SELECT empH_companyName, empH_positionName FROM tblcandemploymenthistory WHERE empH_candId = :cand_id";
+  $stmt = $conn->prepare($sql);
+  $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+  $stmt->execute();
+  $employmentHistory = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+  // Add company names and position names to the expected keywords
+  $expectedKeywords = array_merge($expectedKeywords, array_column($employmentHistory, 'empH_companyName'));
+  $expectedKeywords = array_merge($expectedKeywords, array_column($employmentHistory, 'empH_positionName'));
+
+  // Fetch skills (skills names)
+  $sql = "SELECT b.perS_name FROM tblcandskills a
+          INNER JOIN tblpersonalskills b ON a.skills_perSId = b.perS_id
+          WHERE a.skills_candId = :cand_id";
+  $stmt = $conn->prepare($sql);
+  $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
+  $stmt->execute();
+  $skills = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+  // Add skills names to the expected keywords
+  $expectedKeywords = array_merge($expectedKeywords, array_column($skills, 'perS_name'));
+
+  // Add final result to return value
+  $returnValue["expectedKeywords"] = $expectedKeywords;
+
+  return json_encode($returnValue);
+}
+
+
+
+
 
 function updateCandidatePersonalInfo($json) {
   include "connection.php";
@@ -1332,6 +1417,64 @@ function updateCandidateLicense($json)
     }
 }
 
+function updateCandidateResume($json) {
+  include "connection.php";
+  $conn->beginTransaction();
+  try {
+      $json = json_decode($json, true);
+      $candidateId = $json['cand_id'] ?? 0;
+      $resumes = $json['resume'] ?? [];
+
+      if (!empty($resumes)) {
+          foreach ($resumes as $item) {
+              $canresId = $item['canres_id'] ?? null;
+              $imageFileName = $_FILES['image']['name'] ?? null;
+              $deleteFlag = $item['deleteFlag'] ?? false;
+
+              if ($deleteFlag && $canresId) {
+
+                $sql = "DELETE FROM tblcandresume WHERE canres_id  = :canres_id  AND canres_candId = :canres_candId";
+                $stmt = $conn->prepare($sql);
+                $stmt->bindParam(':canres_id', $canresId);
+                $stmt->bindParam(':canres_candId', $candidateId);
+                $stmt->execute();
+            }
+
+              elseif ($canresId === null) {
+
+                  $sql = "INSERT INTO tblcandresume (canres_candId,  canres_image) VALUES (:canres_candId, :canres_image)";
+                  $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':canres_candId', $candidateId);
+                  $stmt->bindParam(':canres_image', $imageFileName);
+                  $stmt->execute();
+              } else {
+
+                  $sql = "UPDATE tblcandresume SET canres_image = :canres_image WHERE canres_id = :canres_id";
+                  $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':canres_image', $imageFileName);
+                  $stmt->bindParam(':canres_id', $canresId);
+                  $stmt->execute();
+              }
+
+
+              if ($imageFileName) {
+                  $targetDir = "uploads/";
+                  $targetFile = $targetDir . basename($imageFileName);
+                  move_uploaded_file($_FILES['image']['tmp_name'], $targetFile);
+              }
+          }
+      }
+
+      $conn->commit();
+      return 1;
+  } catch (PDOException $e) {
+      $conn->rollBack();
+      error_log("Error updating training: " . $e->getMessage());
+      return 0;
+  }
+}
+
+
 function updateEmailPassword($json)
 {
     include "connection.php";
@@ -1586,6 +1729,12 @@ switch ($operation) {
     break;
   case "updatePassword":
     echo $user->updatePassword($json);
+    break;
+  case "getCandidateExpectedKeywords":
+    echo $user->getCandidateExpectedKeywords($json);
+    break;
+  case "updateCandidateResume":
+    echo $user->updateCandidateResume($json);
     break;
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
