@@ -802,9 +802,6 @@ function getCandidateExpectedKeywords($json) {
       return json_encode(["error" => "Invalid candidate ID"]);
   }
 
-  // Array to store the expected keywords
-  $expectedKeywords = [];
-
   // Fetch candidate's name
   $sql = "SELECT cand_firstname, cand_lastname, cand_middlename FROM tblcandidates WHERE cand_id = :cand_id";
   $stmt = $conn->prepare($sql);
@@ -812,10 +809,10 @@ function getCandidateExpectedKeywords($json) {
   $stmt->execute();
   $candidateInfo = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-  // Add candidate's full name as keywords
+  // Add candidate's full name
   if ($candidateInfo) {
       $fullName = $candidateInfo['cand_firstname'] . ' ' . $candidateInfo['cand_middlename'] . ' ' . $candidateInfo['cand_lastname'];
-      $expectedKeywords[] = $fullName;
+      $returnValue["candidateInfo"] = ["fullName" => $fullName];
   }
 
   // Fetch educational background (course names and institution names)
@@ -828,9 +825,10 @@ function getCandidateExpectedKeywords($json) {
   $stmt->execute();
   $educationalBackground = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-  // Add course names and institution names to the expected keywords
-  $expectedKeywords = array_merge($expectedKeywords, array_column($educationalBackground, 'courses_name'));
-  $expectedKeywords = array_merge($expectedKeywords, array_column($educationalBackground, 'institution_name'));
+  $returnValue["educationalBackground"] = [
+      "courses" => array_column($educationalBackground, 'courses_name'),
+      "institutions" => array_column($educationalBackground, 'institution_name')
+  ];
 
   // Fetch employment history (company names and position names)
   $sql = "SELECT empH_companyName, empH_positionName FROM tblcandemploymenthistory WHERE empH_candId = :cand_id";
@@ -839,9 +837,10 @@ function getCandidateExpectedKeywords($json) {
   $stmt->execute();
   $employmentHistory = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-  // Add company names and position names to the expected keywords
-  $expectedKeywords = array_merge($expectedKeywords, array_column($employmentHistory, 'empH_companyName'));
-  $expectedKeywords = array_merge($expectedKeywords, array_column($employmentHistory, 'empH_positionName'));
+  $returnValue["employmentHistory"] = [
+      "companies" => array_column($employmentHistory, 'empH_companyName'),
+      "positions" => array_column($employmentHistory, 'empH_positionName')
+  ];
 
   // Fetch skills (skills names)
   $sql = "SELECT b.perS_name FROM tblcandskills a
@@ -852,11 +851,7 @@ function getCandidateExpectedKeywords($json) {
   $stmt->execute();
   $skills = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-  // Add skills names to the expected keywords
-  $expectedKeywords = array_merge($expectedKeywords, array_column($skills, 'perS_name'));
-
-  // Add final result to return value
-  $returnValue["expectedKeywords"] = $expectedKeywords;
+  $returnValue["skills"] = array_column($skills, 'perS_name');
 
   return json_encode($returnValue);
 }
