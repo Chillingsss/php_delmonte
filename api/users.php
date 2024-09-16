@@ -775,7 +775,7 @@ function isEmailExist($json)
    $stmt->execute();
    $returnValue["license"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-   $sql = "SELECT a.canres_image, a.canres_candId
+   $sql = "SELECT a.canres_image, a.canres_candId, a.canres_id
      FROM tblcandresume a
      WHERE canres_candId = :cand_id
      ORDER BY a.canres_candId DESC";
@@ -1099,7 +1099,7 @@ function updateCandidateEmploymentInfo($json)
 {
     include "connection.php";
     $data = json_decode($json, true);
-    $cand_id = isset($data['candidateId']) ? (int) $data['candidateId'] : 0;
+    $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
 
     $conn->beginTransaction();
     try {
