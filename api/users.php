@@ -592,7 +592,7 @@ function isEmailExist($json)
     include "connection.php";
 
     try {
-        // Ensure 'cand_id' is provided in the POST request
+
         if (!isset($_POST['cand_id'])) {
             echo json_encode(["error" => "cand_id not provided"]);
             return;
@@ -600,7 +600,7 @@ function isEmailExist($json)
 
         $cand_id = (int) $_POST['cand_id'];
 
-        // Prepare the SQL query to fetch applied jobs
+
         $sql = "SELECT a.jobM_title
                 FROM tbljobsmaster a
                 INNER JOIN tblapplications b
@@ -611,38 +611,37 @@ function isEmailExist($json)
         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
         $stmt->execute();
 
-        // Fetch the results
+
         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Check if any jobs were found
+
         if (empty($result)) {
             echo json_encode(["error" => "No applied jobs found"]);
             return;
         }
 
-        // Return the results as JSON
+
         echo json_encode($result);
 
     } catch (PDOException $e) {
-        // Return any database errors
+
         echo json_encode(["error" => "Database error: " . $e->getMessage()]);
     }
 }
 
 
 
-  function applyForJob()
+function applyForJob()
 {
     include "connection.php";
 
-    if (!isset($_POST['user_id']) || !isset($_POST['jobId'])) {
-        echo json_encode(["error" => "Missing required parameters"]);
-        return;
-    }
+    // if (!isset($_POST['user_id']) || !isset($_POST['jobId'])) {
+    //     echo json_encode(["error" => "Missing required parameters"]);
+    //     return;
+    // }
 
     $user_id = $_POST['user_id'];
     $jobId = $_POST['jobId'];
-
 
     $sqlCheckJob = "SELECT jobM_id FROM tbljobsmaster WHERE jobM_id = :jobId";
     $stmtCheckJob = $conn->prepare($sqlCheckJob);
@@ -654,7 +653,6 @@ function isEmailExist($json)
         return;
     }
 
-
     $sqlCheckApplication = "SELECT app_id FROM tblapplications WHERE app_candId = :user_id AND app_jobMId = :jobId";
     $stmtCheckApplication = $conn->prepare($sqlCheckApplication);
     $stmtCheckApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
@@ -662,7 +660,7 @@ function isEmailExist($json)
     $stmtCheckApplication->execute();
 
     if ($stmtCheckApplication->rowCount() > 0) {
-        echo json_encode(["error" => "You have already applied for this job"]);
+        echo json_encode(["status" => "duplicate", "message" => "You have already applied for this job"]);
         return;
     }
 
@@ -670,30 +668,41 @@ function isEmailExist($json)
     $stmtGetStatusId = $conn->prepare($sqlGetStatusId);
     $stmtGetStatusId->execute();
     $status = $stmtGetStatusId->fetch(PDO::FETCH_ASSOC);
-
-    if (!$status) {
-        echo json_encode(["error" => "Pending status not found"]);
-        return;
-    }
-
     $appSId = $status['status_id'];
 
-    $currentDateTime = date('Y-m-d H:i:s');
-    $sql = "
-        INSERT INTO tblapplications (app_candId, app_jobMId, app_datetime, app_statusId)
-        VALUES (:user_id, :jobId, :app_datetime, :appSId)
-    ";
+    $conn->beginTransaction();
 
     try {
-        $stmt = $conn->prepare($sql);
-        $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-        $stmt->bindParam(':jobId', $jobId, PDO::PARAM_INT);
-        $stmt->bindParam(':app_datetime', $currentDateTime, PDO::PARAM_STR);
-        $stmt->bindParam(':appSId', $appSId, PDO::PARAM_INT);
-        $stmt->execute();
 
+        date_default_timezone_set('Asia/Manila');
+        $currentDateTime = date('Y-m-d H:i:s');
+
+        $sqlApplication = "
+            INSERT INTO tblapplications (app_candId, app_jobMId, app_datetime)
+            VALUES (:user_id, :jobId, :app_datetime)
+        ";
+        $stmtApplication = $conn->prepare($sqlApplication);
+        $stmtApplication->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+        $stmtApplication->bindParam(':jobId', $jobId, PDO::PARAM_INT);
+        $stmtApplication->bindParam(':app_datetime', $currentDateTime, PDO::PARAM_STR);
+        $stmtApplication->execute();
+
+        $applicationId = $conn->lastInsertId();
+
+        $sqlApplicationStatus = "
+            INSERT INTO tblapplicationstatus (appS_appId, appS_statusId, appS_date)
+            VALUES (:appS_appId, :appS_statusId, :appS_date)
+        ";
+        $stmtApplicationStatus = $conn->prepare($sqlApplicationStatus);
+        $stmtApplicationStatus->bindParam(':appS_appId', $applicationId, PDO::PARAM_INT);
+        $stmtApplicationStatus->bindParam(':appS_statusId', $appSId, PDO::PARAM_INT);
+        $stmtApplicationStatus->bindParam(':appS_date', $currentDateTime, PDO::PARAM_STR);
+        $stmtApplicationStatus->execute();
+
+        $conn->commit();
         echo json_encode(["success" => "Job applied successfully"]);
     } catch (PDOException $e) {
+        $conn->rollBack();
         echo json_encode(["error" => $e->getMessage()]);
     }
 }
@@ -795,27 +804,25 @@ function getCandidateExpectedKeywords($json) {
   $returnValue = [];
   $data = json_decode($json, true);
 
-  // Ensure the candidate ID is provided
+
   $cand_id = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
 
   if ($cand_id === 0) {
       return json_encode(["error" => "Invalid candidate ID"]);
   }
 
-  // Fetch candidate's name
   $sql = "SELECT cand_firstname, cand_lastname, cand_middlename FROM tblcandidates WHERE cand_id = :cand_id";
   $stmt = $conn->prepare($sql);
   $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
   $stmt->execute();
   $candidateInfo = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-  // Add candidate's full name
   if ($candidateInfo) {
       $fullName = $candidateInfo['cand_firstname'] . ' ' . $candidateInfo['cand_middlename'] . ' ' . $candidateInfo['cand_lastname'];
       $returnValue["candidateInfo"] = ["fullName" => $fullName];
   }
 
-  // Fetch educational background (course names and institution names)
+
   $sql = "SELECT b.courses_name, c.institution_name FROM tblcandeducbackground a
           INNER JOIN tblcourses b ON a.educ_coursesId = b.courses_id
           INNER JOIN tblinstitution c ON a.educ_institutionId = c.institution_id
@@ -830,7 +837,7 @@ function getCandidateExpectedKeywords($json) {
       "institutions" => array_column($educationalBackground, 'institution_name')
   ];
 
-  // Fetch employment history (company names and position names)
+
   $sql = "SELECT empH_companyName, empH_positionName FROM tblcandemploymenthistory WHERE empH_candId = :cand_id";
   $stmt = $conn->prepare($sql);
   $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
@@ -842,7 +849,7 @@ function getCandidateExpectedKeywords($json) {
       "positions" => array_column($employmentHistory, 'empH_positionName')
   ];
 
-  // Fetch skills (skills names)
+
   $sql = "SELECT b.perS_name FROM tblcandskills a
           INNER JOIN tblpersonalskills b ON a.skills_perSId = b.perS_id
           WHERE a.skills_candId = :cand_id";
