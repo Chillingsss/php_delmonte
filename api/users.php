@@ -546,88 +546,48 @@ function isEmailExist($json)
   }
 
 
-
-  // function getAppliedJobs()
-  // {
-  //   include "connection.php";
-
-  //   try {
-
-  //     $json = file_get_contents('php://input');
-  //     $data = json_decode($json, true);
-
-
-  //     error_log(print_r($data, true));
-
-  //     if (!isset($data['cand_id'])) {
-  //       return json_encode(["error" => "cand_id not provided"]);
-  //     }
-
-  //     $cand_id = (int) $data['cand_id'];
-
-  //     $sql = "SELECT a.jobM_title
-  //                 FROM tbljobsmaster a
-  //                 INNER JOIN tblapplications b
-  //                 ON a.jobM_id  = b.posA_jobMId
-  //                 WHERE b.posA_candId  = :cand_id";
-
-  //     $stmt = $conn->prepare($sql);
-  //     $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
-  //     $stmt->execute();
-
-  //     $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-  //     if (empty($result)) {
-  //       return json_encode(["error" => "No applied jobs found"]);
-  //     }
-
-  //     return json_encode($result);
-
-  //   } catch (PDOException $e) {
-  //     return json_encode(["error" => "Database error: " . $e->getMessage()]);
-  //   }
-  // }
-
   function getAppliedJobs() {
     include "connection.php";
 
     try {
-
-        if (!isset($_POST['cand_id'])) {
-            echo json_encode(["error" => "cand_id not provided"]);
+        if (!isset($_POST['cand_id']) || empty($_POST['cand_id'])) {
+            echo json_encode(["error" => "cand_id is required"]);
             return;
         }
 
         $cand_id = (int) $_POST['cand_id'];
 
-
-        $sql = "SELECT a.jobM_title
+        $sql = "SELECT a.jobM_title, d.status_name
                 FROM tbljobsmaster a
                 INNER JOIN tblapplications b
                 ON a.jobM_id  = b.app_jobMId
+                INNER JOIN tblapplicationstatus c
+                ON b.app_id = c.appS_appId
+                INNER JOIN tblstatus d
+                ON c.appS_statusId = d.status_id
                 WHERE b.app_candId  = :cand_id";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
         $stmt->execute();
 
-
         $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-
         if (empty($result)) {
-            echo json_encode(["error" => "No applied jobs found"]);
+            echo json_encode(["message" => "No applied jobs found"]);
             return;
         }
-
 
         echo json_encode($result);
 
     } catch (PDOException $e) {
-
         echo json_encode(["error" => "Database error: " . $e->getMessage()]);
     }
 }
+
+
+
+
 
 
 
@@ -1255,16 +1215,12 @@ function updateCandidateTraining($json) {
               $deleteFlag = $item['deleteFlag'] ?? false;
 
               if ($deleteFlag && $trainingId) {
-
                 $sql = "DELETE FROM tblcandtraining WHERE training_id = :training_id AND training_candId = :training_candId";
                 $stmt = $conn->prepare($sql);
                 $stmt->bindParam(':training_id', $trainingId);
                 $stmt->bindParam(':training_candId', $candidateId);
                 $stmt->execute();
-            }
-
-              elseif ($trainingId === null) {
-
+              } elseif ($trainingId === null) {
                   $sql = "INSERT INTO tblcandtraining (training_candId, training_perTId, training_image) VALUES (:training_candId, :training_perTId, :training_image)";
                   $stmt = $conn->prepare($sql);
                   $stmt->bindParam(':training_candId', $candidateId);
@@ -1272,7 +1228,6 @@ function updateCandidateTraining($json) {
                   $stmt->bindParam(':training_image', $imageFileName);
                   $stmt->execute();
               } else {
-
                   $sql = "UPDATE tblcandtraining SET training_perTId = :training_perTId, training_image = :training_image WHERE training_id = :training_id";
                   $stmt = $conn->prepare($sql);
                   $stmt->bindParam(':training_perTId', $perTId);
@@ -1281,11 +1236,17 @@ function updateCandidateTraining($json) {
                   $stmt->execute();
               }
 
-
               if ($imageFileName) {
                   $targetDir = "uploads/";
                   $targetFile = $targetDir . basename($imageFileName);
                   move_uploaded_file($_FILES['image']['tmp_name'], $targetFile);
+
+                  $flutterAssetsDir = "C:/Users/ACER/delmonteflutter/assets/images/";
+                  if (!file_exists($flutterAssetsDir)) {
+                      mkdir($flutterAssetsDir, 0777, true);
+                  }
+                  $flutterTargetFile = $flutterAssetsDir . basename($imageFileName);
+                  copy($targetFile, $flutterTargetFile);
               }
           }
       }
