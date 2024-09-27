@@ -550,22 +550,24 @@ function isEmailExist($json)
     include "connection.php";
 
     try {
-        if (!isset($_POST['cand_id']) || empty($_POST['cand_id'])) {
-            echo json_encode(["error" => "cand_id is required"]);
-            return;
-        }
-
         $cand_id = (int) $_POST['cand_id'];
 
-        $sql = "SELECT a.jobM_title, d.status_name
+        $sql = "SELECT
+                    a.jobM_title,
+                    d.status_name,
+                    b.app_id,
+                    b.app_datetime
                 FROM tbljobsmaster a
-                INNER JOIN tblapplications b
-                ON a.jobM_id  = b.app_jobMId
-                INNER JOIN tblapplicationstatus c
-                ON b.app_id = c.appS_appId
-                INNER JOIN tblstatus d
-                ON c.appS_statusId = d.status_id
-                WHERE b.app_candId  = :cand_id";
+                INNER JOIN tblapplications b ON a.jobM_id = b.app_jobMId
+                INNER JOIN (
+                    SELECT appS_appId, MAX(appS_id) as max_appS_id
+                    FROM tblapplicationstatus
+                    GROUP BY appS_appId
+                ) c ON b.app_id = c.appS_appId
+                INNER JOIN tblapplicationstatus e ON c.max_appS_id = e.appS_id
+                INNER JOIN tblstatus d ON e.appS_statusId = d.status_id
+                WHERE b.app_candId = :cand_id
+                ORDER BY b.app_datetime DESC";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':cand_id', $cand_id, PDO::PARAM_INT);
@@ -684,7 +686,7 @@ function applyForJob()
     $returnValue["candidateInformation"] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
 
-    $sql = "SELECT b.courses_name, c.institution_name, a.educ_dategraduate, d.course_categoryName, e.crs_type_name, a.educ_back_id, b.courses_id, c.institution_id FROM tblcandeducbackground a
+    $sql = "SELECT b.courses_name, c.institution_name, a.educ_dategraduate, d.course_categoryName, e.crs_type_name, a.educ_back_id, b.courses_id, c.institution_id, d.course_categoryId, e.crs_type_id FROM tblcandeducbackground a
      INNER JOIN tblcourses b ON a.educ_coursesId = b.courses_id
      INNER JOIN tblinstitution c ON a.educ_institutionId = c.institution_id
      INNER JOIN tblcoursescategory d ON b.courses_coursecategoryId = d.course_categoryId
