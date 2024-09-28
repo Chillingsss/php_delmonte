@@ -511,7 +511,7 @@ function isEmailExist($json)
                GROUP_CONCAT(DISTINCT f.jknow_text SEPARATOR '|') as jknow_text,
                GROUP_CONCAT(DISTINCT i.knowledge_name SEPARATOR '|') as knowledge_name,
                GROUP_CONCAT(DISTINCT g.jskills_text SEPARATOR '|') as jskills_text,
-               GROUP_CONCAT(DISTINCT h.jtrng_text SEPARATOR '|') as jtrng_text,
+               GROUP_CONCAT(DISTINCT j.perT_name SEPARATOR '|') as perT_name,
                (SELECT COUNT(*)
                 FROM tblapplications b
                 WHERE b.app_jobMId = a.jobM_id) as Total_Applied
@@ -523,6 +523,7 @@ function isEmailExist($json)
         LEFT JOIN tbljobsskills g ON a.jobM_id = g.jskills_jobId
         LEFT JOIN tbljobstrainings h ON a.jobM_id = h.jtrng_jobId
         LEFT JOIN tblpersonalknowledge i ON f.jknow_knowledgeId = i.knowledge_id
+        LEFT JOIN tblpersonaltraining j ON h.jtrng_trainingId = j.perT_id
         WHERE a.jobM_status = 1
         GROUP BY a.jobM_id";
 
