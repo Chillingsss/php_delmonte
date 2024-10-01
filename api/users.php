@@ -505,13 +505,15 @@ function isEmailExist($json)
         SELECT a.jobM_id, a.jobM_title, a.jobM_description, a.jobM_status,
                DATE_FORMAT(a.jobM_createdAt, '%b %d, %Y %h:%i %p') as jobM_createdAt,
                GROUP_CONCAT(DISTINCT c.duties_text SEPARATOR '|') as duties_text,
-               GROUP_CONCAT(DISTINCT d.jeduc_text SEPARATOR '|') as jeduc_text,
+               GROUP_CONCAT(DISTINCT k.course_categoryName SEPARATOR '|') as course_categoryName,
                GROUP_CONCAT(DISTINCT e.jwork_responsibilities SEPARATOR '|') as jwork_responsibilities,
                GROUP_CONCAT(DISTINCT e.jwork_duration SEPARATOR '|') as jwork_duration,
                GROUP_CONCAT(DISTINCT f.jknow_text SEPARATOR '|') as jknow_text,
                GROUP_CONCAT(DISTINCT i.knowledge_name SEPARATOR '|') as knowledge_name,
                GROUP_CONCAT(DISTINCT g.jskills_text SEPARATOR '|') as jskills_text,
                GROUP_CONCAT(DISTINCT j.perT_name SEPARATOR '|') as perT_name,
+               GROUP_CONCAT(DISTINCT CONCAT(n.license_type_name, ' in ', m.license_master_name) SEPARATOR '|') as license_master_name,
+
                (SELECT COUNT(*)
                 FROM tblapplications b
                 WHERE b.app_jobMId = a.jobM_id) as Total_Applied
@@ -524,6 +526,10 @@ function isEmailExist($json)
         LEFT JOIN tbljobstrainings h ON a.jobM_id = h.jtrng_jobId
         LEFT JOIN tblpersonalknowledge i ON f.jknow_knowledgeId = i.knowledge_id
         LEFT JOIN tblpersonaltraining j ON h.jtrng_trainingId = j.perT_id
+        LEFT JOIN tblcoursescategory k ON d.jeduc_categoryId = k.course_categoryId
+        LEFT JOIN tbljobslicense l ON a.jobM_id = l.jlicense_jobId
+        LEFT JOIN tbllicensemaster m ON l.jlicense_licenceMId = m.license_master_id
+        LEFT JOIN tbllicensetype n ON m.license_master_typeId = n.license_type_id
         WHERE a.jobM_status = 1
         GROUP BY a.jobM_id";
 
