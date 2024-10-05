@@ -22,8 +22,10 @@ class User
     include "connection.php";
     $json = json_decode($json, true);
 
-
-    $sql = "SELECT * FROM tbladmin WHERE adm_email = :username AND BINARY adm_password = :password";
+    // Corrected SQL query
+    $sql = "SELECT a.adm_id, a.adm_name, a.adm_email, a.adm_password, b.userL_level AS adm_userLevel FROM tbladmin a
+            INNER JOIN tbluserlevel b ON a.adm_userLevel = b.userL_id
+            WHERE adm_email = :username AND BINARY adm_password = :password";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':username', $json['username']);
     $stmt->bindParam(':password', $json['password']);
@@ -34,12 +36,11 @@ class User
         return json_encode([
             'adm_id' => $user['adm_id'],
             // 'user_level_id' => $user['user_level_id'],
-            'adm_user_level' => $user['adm_user_level'],
+            'adm_userLevel' => $user['adm_userLevel'],
             'adm_name' => $user['adm_name'],
             'adm_email' => $user['adm_email']
         ]);
     }
-
 
     $sql = "SELECT * FROM tblsupervisor WHERE sup_email = :username AND BINARY sup_password = :password";
     $stmt = $conn->prepare($sql);
@@ -58,7 +59,9 @@ class User
     }
 
 
-    $sql = "SELECT * FROM tblcandidates WHERE cand_email = :username AND BINARY cand_password = :password";
+    $sql = "SELECT a.cand_id, a.cand_firstname, a.cand_lastname, a.cand_email, b.userL_level AS cand_userLevel FROM tblcandidates a
+    INNER JOIN tbluserlevel b ON a.cand_userLevel = b.userL_id
+    WHERE a.cand_email = :username AND BINARY a.cand_password = :password";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':username', $json['username']);
     $stmt->bindParam(':password', $json['password']);
@@ -71,7 +74,7 @@ class User
             'cand_firstname' => $user['cand_firstname'],
             'cand_lastname' => $user['cand_lastname'],
             'cand_email' => $user['cand_email'],
-            'user_level_id' => 'applicant'
+            'cand_userLevel' => $user['cand_userLevel']
         ]);
     }
 
