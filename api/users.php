@@ -310,51 +310,41 @@ function getLicense()
 //     return json_encode(["pincode" => $pincode, "expirationDate" => $expirationTimestamp]);
 // }
 
-function getPinCodeUpdate($json)
-{
+function getPinCodeUpdate($json) {
+  include "connection.php";
+  include "send_email.php";
 
-    include "connection.php";
-    include "send_email.php";
+  $data = json_decode($json, true);
 
-    $data = json_decode($json, true);
-    $email = $data['email'];
+  $currentEmail = $data['currentEmail'];
+  $newEmail = $data['newEmail'];
 
+  // Ensure the current email exists in the database
+  if (!recordExists($currentEmail, "tblcandidates", "cand_email")) {
+      return json_encode(["error" => "Current email not found"]);
+  }
 
-    $sql = "SELECT cand_id, cand_email, cand_alternateEmail FROM tblcandidates WHERE cand_email = :email OR cand_alternateEmail = :email";
-    $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':email', $email, PDO::PARAM_STR);
-    $stmt->execute();
+  // Generate a PIN code
+  $firstLetter = strtoupper(substr($currentEmail, 0, 1));
+  $thirdLetter = strtoupper(substr($currentEmail, 2, 1));
+  $pincode = $firstLetter . rand(100, 999) . $thirdLetter . rand(10000, 99999);
 
+  $currentDateTime = new DateTime("now", new DateTimeZone('Asia/Manila'));
+  $expirationDateTime = $currentDateTime->add(new DateInterval('PT15M')); // 15 minutes validity
+  $expirationTimestamp = $expirationDateTime->format('Y-m-d H:i:s');
 
-    $candidate = $stmt->fetch(PDO::FETCH_ASSOC);
+  // Send PIN code to the current email
+  $sendEmail = new SendEmail();
+  $sendEmail->sendEmail($currentEmail, $pincode . " - Your PIN Code", "Please use the following code:<br /><br /><b>$pincode</b>");
 
-    if (!$candidate) {
-        return json_encode(["error" => "Email not found in the system."]);
-    }
+  // Check if the new email is different and if so, send the PIN code to the new email as well
+  if ($newEmail && $newEmail !== $currentEmail) {
+      $sendEmail->sendEmail($newEmail, $pincode . " - Your PIN Code", "Please use the following code to confirm your new email:<br /><br /><b>$pincode</b>");
+  }
 
-
-    $cand_id = $candidate['cand_id'];
-
-
-    $firstLetter = strtoupper(substr($email, 0, 1));
-    $thirdLetter = strtoupper(substr($email, 2, 1));
-    $pincode = $firstLetter . rand(100, 999) . $thirdLetter . rand(10000, 99999);
-
-
-    $currentDateTime = new DateTime("now", new DateTimeZone('Asia/Manila'));
-    $expirationDateTime = $currentDateTime->add(new DateInterval('PT15M'));
-    $expirationTimestamp = $expirationDateTime->format('Y-m-d H:i:s');
-
-
-    $sendEmail = new SendEmail();
-    $sendEmail->sendEmail($email, "$pincode - Your PIN Code", "Please use the following code:<br /><br /> <b>$pincode</b>");
-
-    return json_encode([
-        "pincode" => $pincode,
-        "expirationDate" => $expirationTimestamp,
-        "cand_id" => $cand_id
-    ]);
+  return json_encode(["pincode" => $pincode, "expirationDate" => $expirationTimestamp]);
 }
+
 
 
 
