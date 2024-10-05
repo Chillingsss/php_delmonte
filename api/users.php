@@ -22,7 +22,7 @@ class User
     include "connection.php";
     $json = json_decode($json, true);
 
-    // Corrected SQL query
+
     $sql = "SELECT a.adm_id, a.adm_name, a.adm_email, a.adm_password, b.userL_level AS adm_userLevel FROM tbladmin a
             INNER JOIN tbluserlevel b ON a.adm_userLevel = b.userL_id
             WHERE adm_email = :username AND BINARY adm_password = :password";
@@ -38,6 +38,7 @@ class User
             // 'user_level_id' => $user['user_level_id'],
             'adm_userLevel' => $user['adm_userLevel'],
             'adm_name' => $user['adm_name'],
+
             'adm_email' => $user['adm_email']
         ]);
     }
