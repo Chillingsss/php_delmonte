@@ -1560,7 +1560,7 @@ function getJobExam($json) {
   $jobM_id = isset($data['jobM_id']) ? (int) $data['jobM_id'] : null;
 
   if ($jobM_id) {
-      $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, b.examC_id, b.examC_text, b.examC_isCorrect, c.exam_id
+      $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, a.examQ_points, b.examC_id, b.examC_text, b.examC_isCorrect, c.exam_id
               FROM tblexamquestion a
               LEFT JOIN tblexamchoices b ON a.examQ_id = b.examC_questionId
               LEFT JOIN tblexam c ON a.examQ_examId = c.exam_id
@@ -1591,6 +1591,8 @@ function getJobExam($json) {
               'examQ_id' => $row['examQ_id'],
               'examQ_text' => $row['examQ_text'],
               'exam_id' => $row['exam_id'],
+              'examQ_points' => $row['examQ_points'],
+              'examQ_typeId' => $row['examQ_typeId'],
               'choices' => []
           ];
       }
@@ -1614,14 +1616,14 @@ function insertExamResult($json) {
   include "connection.php";
   $data = json_decode($json, true);
 
-  // Extract data from JSON
+
   $candId = isset($data['examR_candId']) ? (int) $data['examR_candId'] : 0;
   $examId = isset($data['examR_examId']) ? (int) $data['examR_examId'] : 0;
   $score = isset($data['examR_score']) ? (int) $data['examR_score'] : 0;
 
   if ($candId && $examId) {
       try {
-          // Insert query to store exam result
+
           $sql = "INSERT INTO tblexamresult (examR_candId, examR_examId, examR_score)
                   VALUES (:candId, :examId, :score)";
           $stmt = $conn->prepare($sql);
@@ -1630,7 +1632,7 @@ function insertExamResult($json) {
           $stmt->bindParam(':score', $score, PDO::PARAM_INT);
           $stmt->execute();
 
-          // Get the last inserted ID
+
           $examR_id = $conn->lastInsertId();
 
           return json_encode(["success" => true, "examR_id" => $examR_id]);
@@ -1654,14 +1656,14 @@ function insertCandidateAnswers($json) {
       try {
           $conn->beginTransaction();
 
-          // Loop through each answer and insert into tblexamcandidateanswer
+
           foreach ($answers as $answer) {
               $question_id = isset($answer['question_id']) ? (int) $answer['question_id'] : 0;
               $multiple_choice_answer = isset($answer['multiple_choice_answer']) ? (int) $answer['multiple_choice_answer'] : null;
               $essay_answer = isset($answer['essay_answer']) ? $answer['essay_answer'] : null;
-              $points_earned = isset($answer['points_earned']) ? (int) $answer['points_earned'] : 0;
+              $points_earned = isset($answer['points_earned']) ? (int) $answer['points_earned'] : 0; // Extract points earned
 
-              // Insert query for storing the candidate's answer
+
               $sql = "INSERT INTO tblexamcandidateanswer (examcandA_resultId, examcandA_questionId, examcandA_choiceId, examcandA_essay, examcandA_pointsEarned)
                       VALUES (:examcandA_resultId, :examcandA_questionId, :examcandA_choiceId, :examcandA_essay, :examcandA_pointsEarned)";
 
@@ -1675,7 +1677,7 @@ function insertCandidateAnswers($json) {
               $stmt->execute();
           }
 
-          // Commit the transaction
+
           $conn->commit();
 
           return json_encode(["success" => true, "message" => "Answers inserted successfully."]);
