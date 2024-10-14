@@ -35,10 +35,8 @@ class User
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         return json_encode([
             'adm_id' => $user['adm_id'],
-            // 'user_level_id' => $user['user_level_id'],
             'adm_userLevel' => $user['adm_userLevel'],
             'adm_name' => $user['adm_name'],
-
             'adm_email' => $user['adm_email']
         ]);
     }
@@ -362,7 +360,7 @@ function getPinCodeEmailUpdate($json) {
 
   $data = json_decode($json, true);
 
- 
+
   $newEmail = $data['newEmail'];
 
 
@@ -596,6 +594,7 @@ function getAppliedJobs() {
 
         $sql = "SELECT
                     a.jobM_title,
+                    a.jobM_id,
                     d.status_name,
                     b.app_id,
                     b.app_datetime
@@ -1553,6 +1552,62 @@ function updatePassword($json)
 }
 
 
+function getJobExam($json) {
+  include "connection.php";
+  $returnValue = [];
+  $data = json_decode($json, true);
+
+  $jobM_id = isset($data['jobM_id']) ? (int) $data['jobM_id'] : null;
+
+  if ($jobM_id) {
+      $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, b.examC_id, b.examC_text, b.examC_isCorrect
+              FROM tblexamquestion a
+              LEFT JOIN tblexamchoices b ON a.examQ_id = b.examC_questionId
+              LEFT JOIN tblexam c ON a.examQ_examId = c.exam_id
+              WHERE c.exam_jobMId = :jobM_id";
+  } else {
+
+      $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, b.examC_id, b.examC_text, b.examC_isCorrect
+              FROM tblexamquestion a
+              LEFT JOIN tblexamchoices b ON a.examQ_id = b.examC_questionId
+              WHERE a.examQ_examId IS NULL";
+  }
+
+  $stmt = $conn->prepare($sql);
+
+  if ($jobM_id) {
+      $stmt->bindParam(':jobM_id', $jobM_id, PDO::PARAM_INT);
+  }
+
+  $stmt->execute();
+
+  $questions = [];
+  while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+      $examQ_id = $row['examQ_id'];
+
+      if (!isset($questions[$examQ_id])) {
+          $questions[$examQ_id] = [
+              'examQ_id' => $row['examQ_id'],
+              'examQ_text' => $row['examQ_text'],
+              'choices' => []
+          ];
+      }
+
+      // Check if choices exist
+      if ($row['examC_id'] !== null) {
+          $questions[$examQ_id]['choices'][] = [
+              'examC_id' => $row['examC_id'],
+              'examC_text' => $row['examC_text'],
+              'examC_isCorrect' => $row['examC_isCorrect']
+          ];
+      }
+  }
+
+  $returnValue["examQuestions"] = array_values($questions);
+
+  return json_encode($returnValue);
+}
+
 
 
 
@@ -1745,6 +1800,9 @@ switch ($operation) {
     break;
   case "updateCandidateResume":
     echo $user->updateCandidateResume($json);
+    break;
+  case "getJobExam":
+    echo $user->getJobExam($json);
     break;
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
