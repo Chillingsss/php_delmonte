@@ -1560,17 +1560,18 @@ function getJobExam($json) {
   $jobM_id = isset($data['jobM_id']) ? (int) $data['jobM_id'] : null;
 
   if ($jobM_id) {
-      $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, b.examC_id, b.examC_text, b.examC_isCorrect
+      $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, b.examC_id, b.examC_text, b.examC_isCorrect, c.exam_id
               FROM tblexamquestion a
               LEFT JOIN tblexamchoices b ON a.examQ_id = b.examC_questionId
               LEFT JOIN tblexam c ON a.examQ_examId = c.exam_id
-              WHERE c.exam_jobMId = :jobM_id";
+              WHERE c.exam_jobMId = :jobM_id OR c.exam_jobMId IS NULL";
   } else {
 
-      $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, b.examC_id, b.examC_text, b.examC_isCorrect
+      $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, b.examC_id, b.examC_text, b.examC_isCorrect, c.exam_id
               FROM tblexamquestion a
               LEFT JOIN tblexamchoices b ON a.examQ_id = b.examC_questionId
-              WHERE a.examQ_examId IS NULL";
+              LEFT JOIN tblexam c ON a.examQ_examId = c.exam_id
+              WHERE c.exam_jobMId IS NULL";
   }
 
   $stmt = $conn->prepare($sql);
@@ -1584,11 +1585,12 @@ function getJobExam($json) {
   $questions = [];
   while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
       $examQ_id = $row['examQ_id'];
-
+      $exam_id = $row['exam_id'];
       if (!isset($questions[$examQ_id])) {
           $questions[$examQ_id] = [
               'examQ_id' => $row['examQ_id'],
               'examQ_text' => $row['examQ_text'],
+              'exam_id' => $row['exam_id'],
               'choices' => []
           ];
       }
@@ -1607,6 +1609,86 @@ function getJobExam($json) {
 
   return json_encode($returnValue);
 }
+
+function insertExamResult($json) {
+  include "connection.php";
+  $data = json_decode($json, true);
+
+  // Extract data from JSON
+  $candId = isset($data['examR_candId']) ? (int) $data['examR_candId'] : 0;
+  $examId = isset($data['examR_examId']) ? (int) $data['examR_examId'] : 0;
+  $score = isset($data['examR_score']) ? (int) $data['examR_score'] : 0;
+
+  if ($candId && $examId) {
+      try {
+          // Insert query to store exam result
+          $sql = "INSERT INTO tblexamresult (examR_candId, examR_examId, examR_score)
+                  VALUES (:candId, :examId, :score)";
+          $stmt = $conn->prepare($sql);
+          $stmt->bindParam(':candId', $candId, PDO::PARAM_INT);
+          $stmt->bindParam(':examId', $examId, PDO::PARAM_INT);
+          $stmt->bindParam(':score', $score, PDO::PARAM_INT);
+          $stmt->execute();
+
+          // Get the last inserted ID
+          $examR_id = $conn->lastInsertId();
+
+          return json_encode(["success" => true, "examR_id" => $examR_id]);
+      } catch (PDOException $e) {
+          return json_encode(["success" => false, "message" => "Error inserting exam result: " . $e->getMessage()]);
+      }
+  } else {
+      return json_encode(["success" => false, "message" => "Invalid candidate or exam ID."]);
+  }
+}
+
+function insertCandidateAnswers($json) {
+  include "connection.php";
+  $data = json_decode($json, true);
+
+  // Extract data from JSON
+  $result_id = isset($data['examR_id']) ? (int) $data['examR_id'] : 0;
+  $answers = isset($data['answers']) ? $data['answers'] : [];
+
+  if ($result_id && !empty($answers)) {
+      try {
+          $conn->beginTransaction();
+
+          // Loop through each answer and insert into tblexamcandidateanswer
+          foreach ($answers as $answer) {
+              $question_id = isset($answer['question_id']) ? (int) $answer['question_id'] : 0;
+              $multiple_choice_answer = isset($answer['multiple_choice_answer']) ? (int) $answer['multiple_choice_answer'] : null;
+              $essay_answer = isset($answer['essay_answer']) ? $answer['essay_answer'] : null;
+              $points_earned = isset($answer['points_earned']) ? (int) $answer['points_earned'] : 0;
+
+              // Insert query for storing the candidate's answer
+              $sql = "INSERT INTO tblexamcandidateanswer (examcandA_resultId, examcandA_questionId, examcandA_choiceId, examcandA_essay, examcandA_pointsEarned)
+                      VALUES (:examcandA_resultId, :examcandA_questionId, :examcandA_choiceId, :examcandA_essay, :examcandA_pointsEarned)";
+
+              $stmt = $conn->prepare($sql);
+              $stmt->bindParam(':examcandA_resultId', $result_id, PDO::PARAM_INT);
+              $stmt->bindParam(':examcandA_questionId', $question_id, PDO::PARAM_INT);
+              $stmt->bindParam(':examcandA_choiceId', $multiple_choice_answer, PDO::PARAM_INT);
+              $stmt->bindParam(':examcandA_essay', $essay_answer, PDO::PARAM_STR);
+              $stmt->bindParam(':examcandA_pointsEarned', $points_earned, PDO::PARAM_INT);
+
+              $stmt->execute();
+          }
+
+          // Commit the transaction
+          $conn->commit();
+
+          return json_encode(["success" => true, "message" => "Answers inserted successfully."]);
+      } catch (PDOException $e) {
+          // Rollback in case of error
+          $conn->rollBack();
+          return json_encode(["success" => false, "message" => "Error inserting answers: " . $e->getMessage()]);
+      }
+  } else {
+      return json_encode(["success" => false, "message" => "Invalid result_id or no answers provided."]);
+  }
+}
+
 
 
 
@@ -1803,6 +1885,12 @@ switch ($operation) {
     break;
   case "getJobExam":
     echo $user->getJobExam($json);
+    break;
+  case "insertExamResult":
+    echo $user->insertExamResult($json);
+    break;
+  case "insertCandidateAnswers":
+    echo $user->insertCandidateAnswers($json);
     break;
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
