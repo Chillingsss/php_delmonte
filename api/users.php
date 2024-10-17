@@ -536,16 +536,15 @@ function isEmailExist($json)
       $sql = "
         SELECT a.jobM_id, a.jobM_title, a.jobM_description, a.jobM_status,
                DATE_FORMAT(a.jobM_createdAt, '%b %d, %Y %h:%i %p') as jobM_createdAt,
-               c.duties_text as duties_text,
-               k.course_categoryName as course_categoryName,
-               e.jwork_responsibilities as jwork_responsibilities,
-               e.jwork_duration as jwork_duration,
-               f.jknow_text as jknow_text,
-               i.knowledge_name as knowledge_name,
-               g.jskills_text as jskills_text,
-               j.perT_name as perT_name,
-               CONCAT(n.license_type_name, ' in ', m.license_master_name) as license_master_name,
-
+               GROUP_CONCAT(DISTINCT c.duties_text SEPARATOR '|') as duties_text,
+               GROUP_CONCAT(DISTINCT k.course_categoryName SEPARATOR '|') as course_categoryName,
+               GROUP_CONCAT(DISTINCT e.jwork_responsibilities SEPARATOR '|') as jwork_responsibilities,
+               GROUP_CONCAT(DISTINCT e.jwork_duration SEPARATOR '|') as jwork_duration,
+               GROUP_CONCAT(DISTINCT f.jknow_text SEPARATOR '|') as jknow_text,
+               GROUP_CONCAT(DISTINCT i.knowledge_name SEPARATOR '|') as knowledge_name,
+               GROUP_CONCAT(DISTINCT g.jskills_text SEPARATOR '|') as jskills_text,
+               GROUP_CONCAT(DISTINCT j.perT_name SEPARATOR '|') as perT_name,
+               GROUP_CONCAT(DISTINCT CONCAT(n.license_type_name, ' in ', m.license_master_name) SEPARATOR '|') as license_master_name,
                (SELECT COUNT(*)
                 FROM tblapplications b
                 WHERE b.app_jobMId = a.jobM_id) as Total_Applied
@@ -590,6 +589,11 @@ function getAppliedJobs() {
     include "connection.php";
 
     try {
+          if (!isset($_POST['cand_id'])) {
+            echo json_encode(["error" => "Missing candidate ID"]);
+            return;
+         }
+
         $cand_id = (int) $_POST['cand_id'];
 
         $sql = "SELECT
@@ -597,7 +601,8 @@ function getAppliedJobs() {
                     a.jobM_id,
                     d.status_name,
                     b.app_id,
-                    b.app_datetime
+                    b.app_datetime,
+                    e.appS_id
                 FROM tbljobsmaster a
                 INNER JOIN tblapplications b ON a.jobM_id = b.app_jobMId
                 INNER JOIN (
@@ -1616,27 +1621,46 @@ function insertExamResult($json) {
   include "connection.php";
   $data = json_decode($json, true);
 
-
   $candId = isset($data['examR_candId']) ? (int) $data['examR_candId'] : 0;
   $examId = isset($data['examR_examId']) ? (int) $data['examR_examId'] : 0;
   $score = isset($data['examR_score']) ? (int) $data['examR_score'] : 0;
+  $status = isset($data['examR_status']) ? (int) $data['examR_status'] : 0;
+  $totalScore = isset($data['examR_totalscore']) ? (int) $data['examR_totalscore'] : 0;
+  $appId = isset($data['app_id']) ? (int) $data['app_id'] : 0;
 
   if ($candId && $examId) {
       try {
+          $conn->beginTransaction();
 
-          $sql = "INSERT INTO tblexamresult (examR_candId, examR_examId, examR_score)
-                  VALUES (:candId, :examId, :score)";
+
+          $sql = "INSERT INTO tblexamresult (examR_candId, examR_examId, examR_score, examR_totalscore, examR_status)
+                  VALUES (:candId, :examId, :score, :totalScore, :status)";
           $stmt = $conn->prepare($sql);
           $stmt->bindParam(':candId', $candId, PDO::PARAM_INT);
           $stmt->bindParam(':examId', $examId, PDO::PARAM_INT);
           $stmt->bindParam(':score', $score, PDO::PARAM_INT);
+          $stmt->bindParam(':status', $status, PDO::PARAM_INT);
+          $stmt->bindParam(':totalScore', $totalScore, PDO::PARAM_INT);
           $stmt->execute();
-
 
           $examR_id = $conn->lastInsertId();
 
+
+          $appStatusId = ($status === 1) ? 7 : 9;
+
+
+          $sqlStatus = "INSERT INTO tblapplicationstatus (appS_appId, appS_statusId, appS_date)
+                        VALUES (:appS_appId, :appS_statusId, NOW())";
+          $stmtStatus = $conn->prepare($sqlStatus);
+          $stmtStatus->bindParam(':appS_appId', $appId, PDO::PARAM_INT);
+          $stmtStatus->bindParam(':appS_statusId', $appStatusId, PDO::PARAM_INT);
+          $stmtStatus->execute();
+
+          $conn->commit();
+
           return json_encode(["success" => true, "examR_id" => $examR_id]);
       } catch (PDOException $e) {
+          $conn->rollBack();
           return json_encode(["success" => false, "message" => "Error inserting exam result: " . $e->getMessage()]);
       }
   } else {
