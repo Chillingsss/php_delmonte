@@ -534,7 +534,7 @@ function isEmailExist($json)
       include "connection.php";
 
       $sql = "
-        SELECT a.jobM_id, a.jobM_title, a.jobM_description, a.jobM_status,
+        SELECT a.jobM_id, a.jobM_title, a.jobM_description, a.jobM_status, a.jobM_passpercentage,
                DATE_FORMAT(a.jobM_createdAt, '%b %d, %Y %h:%i %p') as jobM_createdAt,
                GROUP_CONCAT(DISTINCT c.duties_text SEPARATOR '|') as duties_text,
                GROUP_CONCAT(DISTINCT k.course_categoryName SEPARATOR '|') as course_categoryName,
@@ -602,7 +602,8 @@ function getAppliedJobs() {
                     d.status_name,
                     b.app_id,
                     b.app_datetime,
-                    e.appS_id
+                    e.appS_id,
+                    a.jobM_passpercentage
                 FROM tbljobsmaster a
                 INNER JOIN tblapplications b ON a.jobM_id = b.app_jobMId
                 INNER JOIN (
