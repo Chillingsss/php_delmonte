@@ -1565,14 +1565,20 @@ function getJobExam($json) {
 
   $jobM_id = isset($data['jobM_id']) ? (int) $data['jobM_id'] : null;
 
+  // Modify the SQL query to prioritize exams with a non-null jobM_id
   if ($jobM_id) {
       $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, a.examQ_points, b.examC_id, b.examC_text, b.examC_isCorrect, c.exam_id
               FROM tblexamquestion a
               LEFT JOIN tblexamchoices b ON a.examQ_id = b.examC_questionId
               LEFT JOIN tblexam c ON a.examQ_examId = c.exam_id
-              WHERE c.exam_jobMId = :jobM_id OR c.exam_jobMId IS NULL";
+              WHERE c.exam_jobMId = :jobM_id
+              UNION
+              SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, a.examQ_points, b.examC_id, b.examC_text, b.examC_isCorrect, c.exam_id
+              FROM tblexamquestion a
+              LEFT JOIN tblexamchoices b ON a.examQ_id = b.examC_questionId
+              LEFT JOIN tblexam c ON a.examQ_examId = c.exam_id
+              WHERE c.exam_jobMId IS NULL";
   } else {
-
       $sql = "SELECT a.examQ_id, a.examQ_text, a.examQ_typeId, b.examC_id, b.examC_text, b.examC_isCorrect, c.exam_id
               FROM tblexamquestion a
               LEFT JOIN tblexamchoices b ON a.examQ_id = b.examC_questionId
@@ -1713,6 +1719,148 @@ function insertCandidateAnswers($json) {
       }
   } else {
       return json_encode(["success" => false, "message" => "Invalid result_id or no answers provided."]);
+  }
+}
+
+function fetchExamResult($json){
+  include "connection.php";
+
+  try {
+    $data = json_decode($json, true);
+
+    if (!isset($data['cand_id'])) {
+      echo json_encode(["error" => "Missing candidate ID"]);
+      return;
+    }
+
+    $candId = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
+
+    $sql = "SELECT
+                a.examR_score,
+                a.examR_totalscore,
+                c.jobM_title,
+                a.examR_status
+            FROM tblexamresult a
+            INNER JOIN tblexam b ON a.examR_examId = b.exam_id
+            INNER JOIN tbljobsmaster c ON b.exam_jobMId = c.jobM_id
+            INNER JOIN tblcandidates d ON a.examR_candId = d.cand_id
+            WHERE a.examR_candId = :cand_id";
+
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $candId, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($result)) {
+      echo json_encode(["message" => "No exam Result found"]);
+      return;
+    }
+
+    // Convert examR_status to "Passed" or "Failed"
+    foreach ($result as &$row) {
+      $row['examR_status'] = $row['examR_status'] == 1 ? "Passed" : "Failed";
+    }
+
+    echo json_encode($result);
+
+  } catch (PDOException $e) {
+    echo json_encode(["error" => "Database error: " . $e->getMessage()]);
+  }
+}
+
+function getJobOffer($json) {
+  include "connection.php";
+
+  try {
+    $data = json_decode($json, true);
+
+    if (!isset($data['cand_id'])) {
+      echo json_encode(["error" => "Missing candidate ID"]);
+      return;
+    }
+
+    $candId = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
+
+    $sql = "SELECT
+                a.joboffer_id,
+                a.joboffer_document,
+                a.joboffer_salary,
+                d.statusjobO_date,
+                a.joboffer_expiryDate,
+                b.jobM_title,
+                c.jobofferS_name
+            FROM tbljoboffer a
+            INNER JOIN tbljobsmaster b ON a.joboffer_jobMId = b.jobM_id
+            INNER JOIN tblstatusjoboffer d ON a.joboffer_id = d.statusjobO_jobofferId
+            INNER JOIN tbljobofferstatus c ON d.statusjobO_statusId = c.jobofferS_id
+            WHERE a.joboffer_candId = :cand_id";
+
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $candId, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($result)) {
+      echo json_encode(["message" => "No job offer found"]);
+      return;
+    }
+
+    echo json_encode($result);
+
+  } catch (PDOException $e) {
+    echo json_encode(["error" => "Database error: " . $e->getMessage()]);
+  }
+}
+
+function insertCandidateJobOfferResponse($json) {
+  include "connection.php";
+
+  try {
+      $data = json_decode($json, true);
+
+      if (!isset($data['job_offer_id']) || !isset($data['status'])) {
+          echo json_encode(["error" => "Missing required fields"]);
+          return;
+      }
+
+      // $candId = (int) $data['cand_id'];
+      $jobOfferId = (int) $data['job_offer_id'];
+      $status = $data['status']; // Expected values: 'accept' or 'decline'
+      $appId = isset($data['app_id']) ? (int) $data['app_id'] : 0;
+
+
+      // Map status to corresponding status ID in tblstatusjoboffer
+      $statusId = ($status === 'accept') ? 1 : 2; // Assuming 1 is for accepted and 2 is for declined
+
+      // Prepare the SQL statement for job offer response
+      $sql = "INSERT INTO tblstatusjoboffer (statusjobO_jobofferId, statusjobO_statusId, statusjobO_date)
+              VALUES (:job_offer_id, :statusjobO_statusId, NOW())";
+
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':job_offer_id', $jobOfferId, PDO::PARAM_INT);
+      // $stmt->bindParam(':cand_id', $candId, PDO::PARAM_INT);
+      $stmt->bindParam(':statusjobO_statusId', $statusId, PDO::PARAM_INT);
+
+      // Execute the statement for job offer response
+      if ($stmt->execute()) {
+          // Prepare the SQL statement for application status
+          $appStatusId = ($status === 'accept') ? 11 : 4; // Assuming 1 is for accepted and 2 is for declined
+          $sqlStatus = "INSERT INTO tblapplicationstatus (appS_appId, appS_statusId, appS_date)
+                        VALUES (:appS_appId, :appS_statusId, NOW())";
+          $stmtStatus = $conn->prepare($sqlStatus);
+          $stmtStatus->bindParam(':appS_appId', $appId, PDO::PARAM_INT);
+          $stmtStatus->bindParam(':appS_statusId', $appStatusId, PDO::PARAM_INT);
+          $stmtStatus->execute();
+
+          echo json_encode(["success" => "Response recorded successfully"]);
+      } else {
+          echo json_encode(["error" => "Failed to record response"]);
+      }
+
+  } catch (PDOException $e) {
+      echo json_encode(["error" => "Database error: " . $e->getMessage()]);
   }
 }
 
@@ -1918,6 +2066,15 @@ switch ($operation) {
     break;
   case "insertCandidateAnswers":
     echo $user->insertCandidateAnswers($json);
+    break;
+  case "fetchExamResult":
+    echo $user->fetchExamResult($json);
+    break;
+  case "getJobOffer":
+    echo $user->getJobOffer($json);
+    break;
+  case "insertCandidateJobOfferResponse":
+    echo $user->insertCandidateJobOfferResponse($json);
     break;
   default:
     echo json_encode("WALA KA NAGBUTANG OG OPERATION SA UBOS HAHAHHA BOBO");
