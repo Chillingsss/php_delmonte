@@ -1360,6 +1360,16 @@ function updateCandidateTraining($json) {
               $imageFileName = $_FILES['image']['name'] ?? null;
               $deleteFlag = $item['deleteFlag'] ?? false;
 
+
+              if ($perTId === "custom" && !empty($item['customTraining'])) {
+                $sql = "INSERT INTO tblpersonaltraining (perT_name) VALUES (:perT_name)";
+                $stmt = $conn->prepare($sql);
+                $stmt->bindParam(':perT_name', $item['customTraining']);
+                $stmt->execute();
+                $perTId = $conn->lastInsertId();
+              }
+
+
               if ($deleteFlag && $trainingId) {
                 $sql = "DELETE FROM tblcandtraining WHERE training_id = :training_id AND training_candId = :training_candId";
                 $stmt = $conn->prepare($sql);
