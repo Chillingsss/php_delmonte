@@ -3,6 +3,60 @@ include "headers.php";
 
 class Admin
 {
+
+  function recordExists($value, $table, $column)
+  {
+    include "connection.php";
+    $sql = "SELECT COUNT(*) FROM $table WHERE $column = :value";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(":value", $value);
+    $stmt->execute();
+    $count = $stmt->fetchColumn();
+    return $count > 0;
+  }
+
+  function uploadImage()
+  {
+    if (isset($_FILES["file"])) {
+      $file = $_FILES['file'];
+      // print_r($file);
+      $fileName = $_FILES['file']['name'];
+      $fileTmpName = $_FILES['file']['tmp_name'];
+      $fileSize = $_FILES['file']['size'];
+      $fileError = $_FILES['file']['error'];
+      // $fileType = $_FILES['file']['type'];
+
+      $fileExt = explode(".", $fileName);
+      $fileActualExt = strtolower(end($fileExt));
+
+      $allowed = ["jpg", "jpeg", "png"];
+
+      if (in_array($fileActualExt, $allowed)) {
+        if ($fileError === 0) {
+          if ($fileSize < 25000000) {
+            $fileNameNew = uniqid("", true) . "." . $fileActualExt;
+            $fileDestination =  'images/' . $fileNameNew;
+            move_uploaded_file($fileTmpName, $fileDestination);
+            return $fileNameNew;
+          } else {
+            return 4;
+          }
+        } else {
+          return 3;
+        }
+      } else {
+        return 2;
+      }
+    } else {
+      return "";
+    }
+  }
+
+  function getCurrentDate()
+  {
+    $today = new DateTime("now", new DateTimeZone('Asia/Manila'));
+    return $today->format('Y-m-d h:i:s A');
+  }
   function addJobMaster($json)
   {
     include "connection.php";
@@ -16,15 +70,16 @@ class Admin
     $jobKnowledge = $data['jobKnowledge'];
     $jobSkills = $data['jobSkill'];
     $jobWorkExperience = $data['jobExperience'];
-    $todayDate = getCurrentDate();
+    $todayDate = $this->getCurrentDate();
 
     try {
-      $sql = "INSERT INTO tbljobsmaster (jobM_title, jobM_description, jobM_status, jobM_createdAt) VALUES (:jobM_title, :jobM_description, :jobM_status, :jobM_createdAt)";
+      $sql = "INSERT INTO tbljobsmaster (jobM_title, jobM_description, jobM_status, jobM_createdAt, jobM_passpercentage) VALUES (:jobM_title, :jobM_description, :jobM_status, :jobM_createdAt, :passing)";
       $stmt = $conn->prepare($sql);
       $stmt->bindParam(":jobM_title", $jobMaster['title']);
       $stmt->bindParam(":jobM_description", $jobMaster['description']);
       $stmt->bindParam(":jobM_status", $jobMaster['isJobActive']);
       $stmt->bindParam(":jobM_createdAt", $todayDate);
+      $stmt->bindParam(":passing", $jobMaster['passingPercentage']);
       $stmt->execute();
 
       $jobMasterId = $conn->lastInsertId();
@@ -91,6 +146,11 @@ class Admin
         $stmt->bindParam(":points", $experience['points']);
         $stmt->execute();
       }
+
+      $sql = "INSERT INTO tblinterviewpassingpercent(passing_jobId, passing_percent) VALUES (:passing_jobId, 50)";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(":passing_jobId", $jobMasterId);
+      $stmt->execute();
       $conn->commit();
       return 1;
     } catch (PDOException $th) {
@@ -102,7 +162,7 @@ class Admin
   function getAllJobs()
   {
     include "connection.php";
-    $sql = "SELECT a.*, COUNT(b.app_id ) as Total_Applied
+    $sql = "SELECT a.*, COUNT(b.app_id) as Total_Applied
               FROM tbljobsmaster a
               LEFT JOIN tblapplications b
               ON a.jobM_id = b.app_jobMId
@@ -227,12 +287,113 @@ class Admin
     $stmt->bindParam(":jobId", $data['jobId']);
     $stmt->execute();
     $returnValue["candidates"] = $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
-
-    $returnValue["interview"] = $this->getJobInterviewDetails($data['jobId']);
+    $returnValue["interview"] = $this->getJobInterviewDetails($data);
+    $returnValue['exam'] = $this->getExamDetails($data['jobId']);
     foreach ($returnValue["candidates"] as &$candidate) {
-      $candidate['points'] = calculateCandidatePoints($candidate['cand_id'], $data['jobId']);
+      $candidate['points'] = $this->calculateCandidatePoints($candidate['cand_id'], $data['jobId']);
     }
     return json_encode($returnValue);
+  }
+
+  function calculateCandidatePoints($candId, $jobId)
+  {
+    include "connection.php";
+    $totalPoints = 0;
+    $maxPoints = 0;
+
+    // Education Points
+    $sql = "SELECT SUM(DISTINCT c.jeduc_points) as educ_points,
+          (SELECT SUM(jeduc_points) FROM tbljobseducation WHERE jeduc_jobId = :jobId) as max_educ_points
+          FROM tblcourses a
+          INNER JOIN tblcoursescategory b ON b.course_categoryId = a.courses_coursecategoryId
+          INNER JOIN tbljobseducation c ON c.jeduc_categoryId = b.course_categoryId
+          INNER JOIN tblcandeducbackground d ON d.educ_coursesId = a.courses_id
+          WHERE d.educ_canId = :candId AND c.jeduc_jobId = :jobId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(":candId", $candId);
+    $stmt->bindParam(":jobId", $jobId);
+    $stmt->execute();
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $educationPoints = $result['educ_points'] ?? 0;
+    $maxEducationPoints = $result['max_educ_points'] ?? 0;
+    $totalPoints += $educationPoints;
+    $maxPoints += $maxEducationPoints;
+
+    // Work Experience Points
+    $sql = "SELECT SUM(DISTINCT a.jwork_points) AS exp_points,
+          (SELECT SUM(jwork_points) FROM tbljobsworkexperience WHERE jwork_jobId = :jobId) AS max_exp_points
+          FROM tbljobsworkexperience a
+          INNER JOIN tblapplications b ON b.app_jobMId = a.jwork_jobId
+          INNER JOIN tblcandemploymenthistory c ON c.empH_candId = b.app_candId
+          WHERE INSTR(a.jwork_responsibilities, c.empH_positionName) > 0
+          AND c.empH_candId = :candId AND a.jwork_jobId = :jobId
+          AND TIMESTAMPDIFF(YEAR, c.empH_startDate, c.empH_endDate) >= a.jwork_duration";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(":candId", $candId);
+    $stmt->bindParam(":jobId", $jobId);
+    $stmt->execute();
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $experiencePoints = $result['exp_points'] ?? 0;
+    $maxExperiencePoints = $result['max_exp_points'] ?? 0;
+    $totalPoints += $experiencePoints;
+    $maxPoints += $maxExperiencePoints;
+
+    // Skills Points
+    $sql = "SELECT SUM(DISTINCT j.jskills_points) as skills_points,
+          (SELECT SUM(jskills_points) FROM tbljobsskills WHERE jskills_jobId = :jobId) as max_skills_points
+          FROM tbljobsskills j
+          INNER JOIN tblcandskills c ON j.jskills_skillsId = c.skills_perSId
+          WHERE c.skills_candId = :candId AND j.jskills_jobId = :jobId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(":candId", $candId);
+    $stmt->bindParam(":jobId", $jobId);
+    $stmt->execute();
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $skillsPoints = $result['skills_points'] ?? 0;
+    $maxSkillsPoints = $result['max_skills_points'] ?? 0;
+    $totalPoints += $skillsPoints;
+    $maxPoints += $maxSkillsPoints;
+
+    // Training Points
+    $sql = "SELECT SUM(DISTINCT j.jtrng_points) as training_points,
+          (SELECT SUM(jtrng_points) FROM tbljobstrainings WHERE jtrng_jobId = :jobId) as max_training_points
+          FROM tbljobstrainings j
+          INNER JOIN tblcandtraining c ON j.jtrng_trainingId = c.training_perTId
+          WHERE c.training_candId = :candId AND j.jtrng_jobId = :jobId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(":candId", $candId);
+    $stmt->bindParam(":jobId", $jobId);
+    $stmt->execute();
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $trainingPoints = $result['training_points'] ?? 0;
+    $maxTrainingPoints = $result['max_training_points'] ?? 0;
+    $totalPoints += $trainingPoints;
+    $maxPoints += $maxTrainingPoints;
+
+    // Knowledge Points
+    $sql = "SELECT SUM(DISTINCT j.jknow_points) as knowledge_points,
+          (SELECT SUM(jknow_points) FROM tbljobsknowledge WHERE jknow_jobId = :jobId) as max_knowledge_points
+          FROM tbljobsknowledge j
+          INNER JOIN tblcandknowledge c ON j.jknow_knowledgeId = c.canknow_knowledgeId
+          WHERE c.canknow_canId = :candId AND j.jknow_jobId = :jobId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(":candId", $candId);
+    $stmt->bindParam(":jobId", $jobId);
+    $stmt->execute();
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+    $knowledgePoints = $result['knowledge_points'] ?? 0;
+    $maxKnowledgePoints = $result['max_knowledge_points'] ?? 0;
+    $totalPoints += $knowledgePoints;
+    $maxPoints += $maxKnowledgePoints;
+
+    // Calculate percentage
+    $percentage = ($maxPoints > 0) ? round(($totalPoints / $maxPoints) * 100, 2) : 0;
+
+    return [
+      'maxPoints' => $maxPoints,
+      'totalPoints' => $totalPoints,
+      'percentage' => $percentage,
+    ];
   }
 
   function getLookUpTables()
@@ -888,132 +1049,48 @@ class Admin
     return json_encode($returnValue);
   }
 
-  function getJobInterviewDetails($jobId)
+  function getJobInterviewDetails($data)
   {
     include "connection.php";
     $returnValue = [];
-
-    $interviewMaster = $this->getInterviewMaster($jobId);
-
-    if (!empty($interviewMaster)) {
-      $interviewId = $interviewMaster[0]['interviewM_id'];
-      $returnValue["interviewMaster"] = $interviewMaster;
-      $returnValue["interviewCriteria"] = $this->getInterviewCriteria($interviewId);
-    } else {
-      $returnValue["interviewMaster"] = 0;
-      $returnValue["interviewCriteria"] = 0;
-    }
-
-    $returnValue["interviewCandidate"] = $this->getInterviewCandidate($jobId);
-
+    $returnValue["interviewPassingPercent"] = $this->getInterviewPassingPercent($data['jobId']);
+    $returnValue["interviewCriteria"] = $this->getInterviewCriteriaMaster($data);
     return $returnValue;
   }
 
-  function getInterviewMaster($jobId)
+  function getInterviewPassingPercent($jobId)
   {
     include "connection.php";
-    $sql = "SELECT * FROM tblinterviewmaster WHERE interviewM_jobId = :jobId";
+    $sql = "SELECT passing_percent FROM tblinterviewpassingpercent WHERE passing_jobId = :jobId";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':jobId', $jobId);
     $stmt->execute();
     return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
   }
 
-  function getInterviewCriteria($interviewId)
+  function getInterviewCategory()
   {
     include "connection.php";
-    $sql = "SELECT * FROM tblinterviewcriteria WHERE inter_criteria_interviewId = :interviewId AND inter_criteria_status = 1";
+    $sql = "SELECT * FROM tblinterviewcategory WHERE interview_categ_status = 1";
     $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':interviewId', $interviewId);
     $stmt->execute();
     return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
   }
 
-  function getInterviewCandidate($jobId)
+  function addInterviewCriteriaMaster($json)
   {
-    include "connection.php";
-    $sql = "SELECT CONCAT(c.cand_lastname, ', ', c.cand_firstname, ' ', c.cand_middlename) AS FullName FROM tblapplications a
-              INNER JOIN tblapplicationstatus b ON b.appS_appId = a.app_id
-              INNER JOIN tblcandidates c ON c.cand_id = a.app_candId
-              WHERE b.appS_statusId = 6 AND a.app_jobMId = :jobId";
-    $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':jobId', $jobId);
-    $stmt->execute();
-    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
-  }
-
-
-
-  function addInterviewMaster($json)
-  {
-    // {"master": {"jobId": 11, "passingPercentage": 60}, "detail": [{"name": "Technical", "points": 10}, {"name": "Managerial", "points": 5}, {"name": "Leadership", "points": 15}]}
-    include "connection.php";
-    $conn->beginTransaction();
-    try {
-      $data = json_decode($json, true);
-      $master = $data['master'];
-      $details = $data['detail'];
-      $sql = "INSERT INTO tblinterviewmaster(interviewM_jobId, interviewM_passingPercentage) VALUES (:jobId, :passingPercentage)";
-      $stmt = $conn->prepare($sql);
-      $stmt->bindParam(":jobId", $master['jobId']);
-      $stmt->bindParam(":passingPercentage", $master['passingPercentage']);
-      $stmt->execute();
-      $interviewId = $conn->lastInsertId();
-      $sql = "INSERT INTO tblinterviewcriteria(inter_criteria_interviewId, inter_criteria_name, inter_criteria_points) VALUES (:interviewId, :name, :points)";
-      $stmt = $conn->prepare($sql);
-      foreach ($details as $detail) {
-        $stmt->bindParam(":interviewId", $interviewId);
-        $stmt->bindParam(":name", $detail['name']);
-        $stmt->bindParam(":points", $detail['points']);
-        $stmt->execute();
-      }
-      $conn->commit();
-      return 1;
-    } catch (\Throwable $th) {
-      $conn->rollBack();
-      return 0;
-    }
-  }
-
-  function updateInterviewMaster($json)
-  {
-    // {"jobId": 11, "passingPercentage": 100}
+    // {"jobId": 11, "criteriaId": 8, "points": 200}
     include "connection.php";
     $data = json_decode($json, true);
-    $sql = "UPDATE tblinterviewmaster SET interviewM_passingPercentage = :passingPercentage WHERE interviewM_jobId = :jobId";
+    $sql = "INSERT INTO tblinterviewcriteriamaster(inter_criteria_jobId, inter_criteria_criteriaId, inter_criteria_points)
+            VALUES (:jobId, :criteriaId, :points)";
     $stmt = $conn->prepare($sql);
-    $stmt->bindParam(":passingPercentage", $data['passingPercentage']);
     $stmt->bindParam(":jobId", $data['jobId']);
-    $stmt->execute();
-    return $stmt->rowCount() > 0 ? 1 : 0;
-  }
-
-  function updateInterviewCriteria($json)
-  {
-    // {"points": 200, "name": "Gwapa", "criteriaId": 2}
-    include "connection.php";
-    $data = json_decode($json, true);
-    $sql = "UPDATE tblinterviewcriteria SET inter_criteria_points = :points, inter_criteria_name = :name WHERE inter_criteria_id = :criteriaId";
-    $stmt = $conn->prepare($sql);
-    $stmt->bindParam(":points", $data['points']);
     $stmt->bindParam(":criteriaId", $data['criteriaId']);
-    $stmt->bindParam(":name", $data['name']);
-    $stmt->execute();
-    return $stmt->rowCount() > 0 ? 1 : 0;
-  }
-
-  function addInterviewCriteria($json)
-  {
-    // {"points": 100, "name": "Wala pay uyab", "interviewId": 1}
-    include "connection.php";
-    $data = json_decode($json, true);
-    $sql = "INSERT INTO tblinterviewcriteria(inter_criteria_interviewId, inter_criteria_name, inter_criteria_points) VALUES (:interviewId, :name, :points)";
-    $stmt = $conn->prepare($sql);
-    $stmt->bindParam(":interviewId", $data['interviewId']);
-    $stmt->bindParam(":name", $data['name']);
     $stmt->bindParam(":points", $data['points']);
     $stmt->execute();
-    return $stmt->rowCount() > 0 ? 1 : 0;
+    $lastId = $conn->lastInsertId();
+    return $stmt->rowCount() > 0 ? $lastId : 0;
   }
 
   function deleteInterviewCriteria($json)
@@ -1021,7 +1098,7 @@ class Admin
     // {"criteriaId": 2}
     include "connection.php";
     $data = json_decode($json, true);
-    $sql = "UPDATE tblinterviewcriteria SET inter_criteria_status = 0 WHERE inter_criteria_id = :criteriaId";
+    $sql = "UPDATE tblinterviewcriteriamaster SET inter_criteria_status = 0 WHERE inter_criteria_id = :criteriaId";
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(":criteriaId", $data['criteriaId']);
     $stmt->execute();
@@ -1033,7 +1110,7 @@ class Admin
     include "connection.php";
     $data = json_decode($json, true);
     $appId = $this->applicationIds($data['jobId'], $data['candId']);
-    $date = getCurrentDate();
+    $date = $this->getCurrentDate();
     $id = json_encode($appId[0]['app_id']);
     $sql = "INSERT tblapplicationstatus(appS_appId, appS_statusId, appS_date) VALUES(:id, :status, :date)";
     $stmt = $conn->prepare($sql);
@@ -1055,41 +1132,15 @@ class Admin
     return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
   }
 
-  // para ni sa pag conduct og interview
-  function getCriteriaForInterview($json)
-  {
-    // {"jobId": 11}
-    include "connection.php";
-    $data = json_decode($json, true);
-    $interviewMasterId = $this->getInterviewMasterId($data['jobId']);
-    if (empty($interviewMasterId)) return 0;
-    $id = json_encode($interviewMasterId[0]['interviewM_id']);
-    $sql = "SELECT * FROM tblinterviewcriteria WHERE inter_criteria_interviewId = :interviewMasterId";
-    $stmt = $conn->prepare($sql);
-    $stmt->bindParam(":interviewMasterId", $id);
-    $stmt->execute();
-    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
-  }
-
-  function getInterviewMasterId($jobId)
-  {
-    // {"jobId": 11}
-    include "connection.php";
-    $sql = "SELECT interviewM_id FROM tblinterviewmaster WHERE interviewM_jobId = :jobId";
-    $stmt = $conn->prepare($sql);
-    $stmt->bindParam(":jobId", $jobId);
-    $stmt->execute();
-    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
-  }
-
   function scoreInterviewApplicant($json)
   {
     include "connection.php";
     $data = json_decode($json, true);
-    $sql = "INSERT INTO tblinterviewcandpoints(interviewP_criteriaId, interviewP_candId, interviewP_points) VALUES(:criteriaId, :candId, :points)";
+    $sql = "INSERT INTO tblinterviewcandpoints(interviewP_jobId, interviewP_criteriaId, interviewP_candId, interviewP_points) VALUES(:jobId, :criteriaId, :candId, :points)";
     $stmt = $conn->prepare($sql);
     foreach ($data as $score) {
       $stmt->execute([
+        ':jobId' => $score['jobId'],
         ':criteriaId' => $score['criteriaId'],
         ':candId' => $score['candId'],
         ':points' => $score['points'],
@@ -1098,215 +1149,836 @@ class Admin
     return $stmt->rowCount() > 0 ? 1 : 0;
   }
 
+  function getCriteriaAndCategory()
+  {
+    include "connection.php";
+    $returnValue = [];
+    $criteria = $this->getInterviewCriteria();
+    $category = $this->getInterviewCategory();
+    if (is_null($criteria) || is_null($category)) {
+      return 0;
+    }
+    $returnValue['criteria'] = $criteria;
+    $returnValue['category'] = $category;
+    return json_encode($returnValue);
+  }
+
+  function getInterviewCriteria()
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tblinterviewcriteria";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getInterviewCriteriaMaster($json)
+  {
+    // {"jobId": 11}
+    include "connection.php";
+    $sql = "SELECT a.inter_criteria_id, b.criteria_inter_name, c.interview_categ_name, a.inter_criteria_points, b.criteria_inter_id FROM tblinterviewcriteriamaster a
+            INNER JOIN tblinterviewcriteria b ON b.criteria_inter_id = a.inter_criteria_criteriaId
+            INNER JOIN tblinterviewcategory c ON c.interview_categ_id = b.criteria_inter_categId
+            WHERE inter_criteria_jobId = :jobId AND a.inter_criteria_status = 1";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':jobId', $json['jobId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+  function getCriteriaForInterview($json)
+  {
+    // {"jobId": 11}
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "SELECT a.inter_criteria_id, a.inter_criteria_points, b.criteria_inter_name, c.interview_categ_name FROM tblinterviewcriteriamaster a
+            INNER JOIN tblinterviewcriteria b ON b.criteria_inter_id = a.inter_criteria_criteriaId
+            INNER JOIN tblinterviewcategory c ON c.interview_categ_id = b.criteria_inter_categId
+            WHERE inter_criteria_jobId = :jobId AND inter_criteria_status = 1
+            ORDER BY b.criteria_inter_categId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':jobId', $data['jobId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
   function getCandInterviewResult($json)
   {
     $returnValue = [];
-    // {"candId": 7, "jobId": 11}
     include "connection.php";
     $data = json_decode($json, true);
-    $candId = $data['candId'];
-    $jobId = $data['jobId'];
 
-    $sql = "SELECT interviewM_passingPercentage FROM tblinterviewmaster WHERE interviewM_jobId = :jobId";
+    // Fetch all active criteria for the job and left join with the candidate's points
+    $sql = "SELECT COALESCE(a.interviewP_points, 0) AS CandPoints, b.inter_criteria_points AS CriteriaPoint, c.criteria_inter_name
+              FROM tblinterviewcriteriamaster b
+              INNER JOIN tblinterviewcriteria c ON c.criteria_inter_id = b.inter_criteria_criteriaId
+              LEFT JOIN tblinterviewcandpoints a ON a.interviewP_criteriaId = b.inter_criteria_id
+              AND a.interviewP_candId = :candId
+              WHERE b.inter_criteria_status = 1 AND b.inter_criteria_jobId = :jobId";
+
     $stmt = $conn->prepare($sql);
-    $stmt->bindParam(":jobId", $jobId);
+    $stmt->bindParam(':candId', $data['candId']);
+    $stmt->bindParam(':jobId', $data['jobId']);
     $stmt->execute();
-    $passingPercentage = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : [];
-    // return json_encode($passingPercentage["interviewM_passingPercentage"]);
+    $returnValue["candCriteriaPoints"] = $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
 
-    $sql = "SELECT SUM(interviewP_points) as candPoints FROM tblinterviewcandpoints a
-            INNER JOIN tblinterviewcriteria b ON b.inter_criteria_id = a.interviewP_criteriaId
-            WHERE a.interviewP_candId = :candId AND b.inter_criteria_status = 1";
+    // Calculate the total points
+    $sql = "SELECT SUM(COALESCE(a.interviewP_points, 0)) as candTotalPoints, SUM(b.inter_criteria_points) as criteriaTotalPoints
+              FROM tblinterviewcriteriamaster b
+              LEFT JOIN tblinterviewcandpoints a ON a.interviewP_criteriaId = b.inter_criteria_id
+              AND a.interviewP_candId = :candId
+              WHERE b.inter_criteria_status = 1 AND b.inter_criteria_jobId = :jobId";
+
     $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':candId', $candId);
+    $stmt->bindParam(':candId', $data['candId']);
+    $stmt->bindParam(':jobId', $data['jobId']);
     $stmt->execute();
-    $candTotalPoints = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC)['candPoints'] : 0;
 
-    $sql = "SELECT SUM(b.inter_criteria_points) as totalPoints FROM tblinterviewmaster a
-            INNER JOIN tblinterviewcriteria b ON a.interviewM_id = b.inter_criteria_interviewId
-            WHERE a.interviewM_jobId = :jobId AND b.inter_criteria_status = 1";
-    $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':jobId', $jobId);
-    $stmt->execute();
-    $totalPoints = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC)['totalPoints'] : 0;
+    $totalPoints = $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : 0;
 
-    $sql = "SELECT b.inter_criteria_name, b.inter_criteria_points as totalPoints, c.interviewP_points as candPoints FROM tblinterviewmaster a
-            INNER JOIN tblinterviewcriteria b ON a.interviewM_id = b.inter_criteria_interviewId
-            INNER JOIN tblinterviewcandpoints c ON b.inter_criteria_id = c.interviewP_criteriaId
-            WHERE a.interviewM_jobId = :jobId AND c.interviewP_candId = :candId AND b.inter_criteria_status = 1";
-    $stmt = $conn->prepare($sql);
-    $stmt->bindParam(':candId', $candId);
-    $stmt->bindParam(':jobId', $jobId);
-    $stmt->execute();
-    $criteriaScore = $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
-
-    if (empty($criteriaScore)) return 0;
-
-    $candidatePercentage = ($candTotalPoints / $totalPoints) * 100;
-
-    $returnValue['candTotalPoints'] = $candTotalPoints;
-    $returnValue['totalPoints'] = $totalPoints;
-    $returnValue['criteriaScore'] = $criteriaScore;
-    $returnValue['isPassed'] = $candidatePercentage <= $passingPercentage["interviewM_passingPercentage"] ? 0 : 1;
+    if ($totalPoints['criteriaTotalPoints'] === null) {
+      return -1;
+    } else {
+      $returnValue["totalPoints"] = $totalPoints;
+    }
 
     return json_encode($returnValue);
   }
-} //admin
 
-function calculateCandidatePoints($candId, $jobId)
-{
-  include "connection.php";
-  $totalPoints = 0;
-  $maxPoints = 0;
 
-  // Education Points
-  $sql = "SELECT SUM(DISTINCT c.jeduc_points) as educ_points,
-          (SELECT SUM(jeduc_points) FROM tbljobseducation WHERE jeduc_jobId = :jobId) as max_educ_points
-          FROM tblcourses a
-          INNER JOIN tblcoursescategory b ON b.course_categoryId = a.courses_coursecategoryId
-          INNER JOIN tbljobseducation c ON c.jeduc_categoryId = b.course_categoryId
-          INNER JOIN tblcandeducbackground d ON d.educ_coursesId = a.courses_id
-          WHERE d.educ_canId = :candId AND c.jeduc_jobId = :jobId";
-  $stmt = $conn->prepare($sql);
-  $stmt->bindParam(":candId", $candId);
-  $stmt->bindParam(":jobId", $jobId);
-  $stmt->execute();
-  $result = $stmt->fetch(PDO::FETCH_ASSOC);
-  $educationPoints = $result['educ_points'] ?? 0;
-  $maxEducationPoints = $result['max_educ_points'] ?? 0;
-  $totalPoints += $educationPoints;
-  $maxPoints += $maxEducationPoints;
 
-  // Work Experience Points
-  $sql = "SELECT SUM(DISTINCT a.jwork_points) AS exp_points,
-          (SELECT SUM(jwork_points) FROM tbljobsworkexperience WHERE jwork_jobId = :jobId) AS max_exp_points
-          FROM tbljobsworkexperience a
-          INNER JOIN tblapplications b ON b.app_jobMId = a.jwork_jobId
-          INNER JOIN tblcandemploymenthistory c ON c.empH_candId = b.app_candId
-          WHERE INSTR(a.jwork_responsibilities, c.empH_positionName) > 0
-          AND c.empH_candId = :candId AND a.jwork_jobId = :jobId
-          AND TIMESTAMPDIFF(YEAR, c.empH_startDate, c.empH_endDate) >= a.jwork_duration";
-  $stmt = $conn->prepare($sql);
-  $stmt->bindParam(":candId", $candId);
-  $stmt->bindParam(":jobId", $jobId);
-  $stmt->execute();
-  $result = $stmt->fetch(PDO::FETCH_ASSOC);
-  $experiencePoints = $result['exp_points'] ?? 0;
-  $maxExperiencePoints = $result['max_exp_points'] ?? 0;
-  $totalPoints += $experiencePoints;
-  $maxPoints += $maxExperiencePoints;
-
-  // Skills Points
-  $sql = "SELECT SUM(DISTINCT j.jskills_points) as skills_points,
-          (SELECT SUM(jskills_points) FROM tbljobsskills WHERE jskills_jobId = :jobId) as max_skills_points
-          FROM tbljobsskills j
-          INNER JOIN tblcandskills c ON j.jskills_skillsId = c.skills_perSId
-          WHERE c.skills_candId = :candId AND j.jskills_jobId = :jobId";
-  $stmt = $conn->prepare($sql);
-  $stmt->bindParam(":candId", $candId);
-  $stmt->bindParam(":jobId", $jobId);
-  $stmt->execute();
-  $result = $stmt->fetch(PDO::FETCH_ASSOC);
-  $skillsPoints = $result['skills_points'] ?? 0;
-  $maxSkillsPoints = $result['max_skills_points'] ?? 0;
-  $totalPoints += $skillsPoints;
-  $maxPoints += $maxSkillsPoints;
-
-  // Training Points
-  $sql = "SELECT SUM(DISTINCT j.jtrng_points) as training_points,
-          (SELECT SUM(jtrng_points) FROM tbljobstrainings WHERE jtrng_jobId = :jobId) as max_training_points
-          FROM tbljobstrainings j
-          INNER JOIN tblcandtraining c ON j.jtrng_trainingId = c.training_perTId
-          WHERE c.training_candId = :candId AND j.jtrng_jobId = :jobId";
-  $stmt = $conn->prepare($sql);
-  $stmt->bindParam(":candId", $candId);
-  $stmt->bindParam(":jobId", $jobId);
-  $stmt->execute();
-  $result = $stmt->fetch(PDO::FETCH_ASSOC);
-  $trainingPoints = $result['training_points'] ?? 0;
-  $maxTrainingPoints = $result['max_training_points'] ?? 0;
-  $totalPoints += $trainingPoints;
-  $maxPoints += $maxTrainingPoints;
-
-  // Knowledge Points
-  $sql = "SELECT SUM(DISTINCT j.jknow_points) as knowledge_points,
-          (SELECT SUM(jknow_points) FROM tbljobsknowledge WHERE jknow_jobId = :jobId) as max_knowledge_points
-          FROM tbljobsknowledge j
-          INNER JOIN tblcandknowledge c ON j.jknow_knowledgeId = c.canknow_knowledgeId
-          WHERE c.canknow_canId = :candId AND j.jknow_jobId = :jobId";
-  $stmt = $conn->prepare($sql);
-  $stmt->bindParam(":candId", $candId);
-  $stmt->bindParam(":jobId", $jobId);
-  $stmt->execute();
-  $result = $stmt->fetch(PDO::FETCH_ASSOC);
-  $knowledgePoints = $result['knowledge_points'] ?? 0;
-  $maxKnowledgePoints = $result['max_knowledge_points'] ?? 0;
-  $totalPoints += $knowledgePoints;
-  $maxPoints += $maxKnowledgePoints;
-
-  // Calculate percentage
-  $percentage = ($maxPoints > 0) ? round(($totalPoints / $maxPoints) * 100, 2) : 0;
-
-  return [
-    'maxPoints' => $maxPoints,
-    'totalPoints' => $totalPoints,
-    'percentage' => $percentage,
-  ];
-}
-
-function recordExists($value, $table, $column)
-{
-  include "connection.php";
-  $sql = "SELECT COUNT(*) FROM $table WHERE $column = :value";
-  $stmt = $conn->prepare($sql);
-  $stmt->bindParam(":value", $value);
-  $stmt->execute();
-  $count = $stmt->fetchColumn();
-  return $count > 0;
-}
-
-function uploadImage()
-{
-  if (isset($_FILES["file"])) {
-    $file = $_FILES['file'];
-    // print_r($file);
-    $fileName = $_FILES['file']['name'];
-    $fileTmpName = $_FILES['file']['tmp_name'];
-    $fileSize = $_FILES['file']['size'];
-    $fileError = $_FILES['file']['error'];
-    // $fileType = $_FILES['file']['type'];
-
-    $fileExt = explode(".", $fileName);
-    $fileActualExt = strtolower(end($fileExt));
-
-    $allowed = ["jpg", "jpeg", "png"];
-
-    if (in_array($fileActualExt, $allowed)) {
-      if ($fileError === 0) {
-        if ($fileSize < 25000000) {
-          $fileNameNew = uniqid("", true) . "." . $fileActualExt;
-          $fileDestination =  'images/' . $fileNameNew;
-          move_uploaded_file($fileTmpName, $fileDestination);
-          return $fileNameNew;
-        } else {
-          return 4;
-        }
-      } else {
-        return 3;
-      }
-    } else {
-      return 2;
-    }
-  } else {
-    return "";
+  function updateJobPassingPercent($json)
+  {
+    // {"jobId": 11, "passingPercent": 80}
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tbljobpassing SET passing_points = :passingPercent WHERE passing_jobId = :jobId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':jobId', $data['jobId']);
+    $stmt->bindParam(':passingPercent', $data['passingPercent']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
   }
-}
 
-function getCurrentDate()
-{
-  $today = new DateTime("now", new DateTimeZone('Asia/Manila'));
-  return $today->format('Y-m-d h:i:s A');
-}
+  function updateInterviewPassingPercent($json)
+  {
+    // {"jobId": 11, "passingPercent": 80}
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tblinterviewpassingpercent SET passing_percent = :passingPercent WHERE passing_jobId = :jobId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':jobId', $data['jobId']);
+    $stmt->bindParam(':passingPercent', $data['passingPercent']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function addExam($json)
+  {
+    // {"master":{"name":"Sample Exam","typeId":2,"jobId":11,"duration":60},
+    // "questions":{"questionMaster":[{"text":"What is the capital of France?","typeId":1,"points":10,"options":[{"text":"Paris","isCorrect":1},{"text":"London","isCorrect":0},{"text":"Berlin","isCorrect":0},{"text":"Madrid","isCorrect":0}]},{"text":"What is 2 + 2?","typeId":1,"points":5,"options":[{"text":"3","isCorrect":0},{"text":"4","isCorrect":1},{"text":"5","isCorrect":0}]}]}}
+
+    include "connection.php";
+    $data = json_decode($json, true);
+    $conn->beginTransaction();
+    try {
+      $master = $data['master'];
+      $questions = $data['questions'];
+      $todayDate = $this->getCurrentDate();
+      $sql = "INSERT INTO tblexam(exam_name, exam_typeId, exam_jobMId, exam_duration, exam_createdAt, exam_updatedAt)
+                  VALUES (:exam_name, :exam_typeId, :exam_jobId, :exam_duration, :exam_createdAt, :exam_updatedAt)";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':exam_name', $master['name']);
+      $stmt->bindParam(':exam_typeId', $master['typeId']);
+      $stmt->bindParam(':exam_jobId', $master['jobId']);
+      $stmt->bindParam(':exam_duration', $master['duration']);
+      $stmt->bindParam(':exam_createdAt', $todayDate);
+      $stmt->bindParam(':exam_updatedAt', $todayDate);
+      $stmt->execute();
+      $examId = $conn->lastInsertId();
+      $sqlQuestion = "INSERT INTO tblexamquestion(examQ_examId, examQ_text, examQ_typeId, examQ_createdAt, examQ_updatedAt, examQ_points)
+                          VALUES (:examQ_examId, :examQ_text, :examQ_typeId, :examQ_createdAt, :examQ_updatedAt, :examQ_points)";
+      $stmtQuestion = $conn->prepare($sqlQuestion);
+      $sqlOption = "INSERT INTO tblexamchoices(examC_questionId, examC_text, examC_isCorrect)
+                        VALUES (:examC_questionId, :examC_text, :examC_isCorrect)";
+      $stmtOption = $conn->prepare($sqlOption);
+      foreach ($questions['questionMaster'] as $question) {
+        $stmtQuestion->bindParam(':examQ_examId', $examId);
+        $stmtQuestion->bindParam(':examQ_text', $question['text']);
+        $stmtQuestion->bindParam(':examQ_typeId', $question['typeId']);
+        $stmtQuestion->bindParam(':examQ_createdAt', $todayDate);
+        $stmtQuestion->bindParam(':examQ_updatedAt', $todayDate);
+        $stmtQuestion->bindParam(':examQ_points', $question['points']);
+        $stmtQuestion->execute();
+        $questionId = $conn->lastInsertId();
+        foreach ($question['options'] as $option) {
+          $stmtOption->bindParam(':examC_questionId', $questionId);
+          $stmtOption->bindParam(':examC_text', $option['text']);
+          $stmtOption->bindParam(':examC_isCorrect', $option['isCorrect']);
+          $stmtOption->execute();
+        }
+      }
+
+      $conn->commit();
+      return 1;
+    } catch (PDOException $e) {
+      $conn->rollBack();
+      return $e->getMessage();
+    }
+  }
+
+  function getExam($jobId)
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tblexam WHERE exam_jobMId = :jobId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':jobId', $jobId);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getExamDetails($jobId)
+  {
+    include "connection.php";
+    $returnValue = [];
+    $exam = $this->getExam($jobId);
+    if ($exam !== 0) {
+      $returnValue['examMaster'] = $exam;
+      $returnValue['questionMaster'] = $this->getExamQuestions($exam[0]['exam_id']);
+    } else {
+      $returnValue = 0;
+    }
+    return $returnValue;
+  }
+
+  function getExamQuestions($examId)
+  {
+    $returnValue = [];
+    include "connection.php";
+    $sql = "SELECT * FROM tblexamquestion WHERE examQ_examId = :examId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':examId', $examId);
+    $stmt->execute();
+    $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $sqlOption = "SELECT * FROM tblexamchoices WHERE examC_questionId = :questionId";
+    $stmtOption = $conn->prepare($sqlOption);
+
+    foreach ($questions as &$question) {
+      $stmtOption->bindParam(':questionId', $question['examQ_id']);
+      $stmtOption->execute();
+      $question['options'] = $stmtOption->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    $returnValue['questions'] = $questions;
+    return $returnValue;
+  }
+
+  function addExamQuestions($json)
+  {
+    // {"examId": 1, "questions": [{"text":"What is the capital of France?","typeId":1,"points":10,"options":[{"text":"Paris","isCorrect":1},{"text":"London","isCorrect":0},{"text":"Berlin","isCorrect":0},{"text":"Madrid","isCorrect":0}]},{"text":"What is 2 + 2?","typeId":1,"points":5,"options":[{"text":"3","isCorrect":0},{"text":"4","isCorrect":1},{"text":"5","isCorrect":0}]}]}
+    include "connection.php";
+    $conn->beginTransaction();
+    try {
+      $data = json_decode($json, true);
+      $currentDate = $this->getCurrentDate();
+      $sql = "INSERT INTO tblexamquestion(examQ_examId, examQ_text, examQ_typeId, examQ_createdAt, examQ_updatedAt, examQ_points)
+            VALUES (:examQ_examId, :examQ_text, :examQ_typeId, :examQ_createdAt, :examQ_updatedAt, :examQ_points)";
+      $sqlOption = "INSERT INTO tblexamchoices(examC_questionId, examC_text, examC_isCorrect)
+                  VALUES (:examC_questionId, :examC_text, :examC_isCorrect)";
+      foreach ($data['questions'] as $question) {
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':examQ_examId', $data['examId']);
+        $stmt->bindParam(':examQ_text', $question['text']);
+        $stmt->bindParam(':examQ_typeId', $question['typeId']);
+        $stmt->bindParam(':examQ_createdAt', $currentDate);
+        $stmt->bindParam(':examQ_updatedAt', $currentDate);
+        $stmt->bindParam(':examQ_points', $question['points']);
+        $stmt->execute();
+        $questionId = $conn->lastInsertId();
+        if (isset($question['options']) && is_array($question['options'])) {
+          $stmtOption = $conn->prepare($sqlOption);
+          foreach ($question['options'] as $option) {
+            $stmtOption->bindParam(':examC_questionId', $questionId);
+            $stmtOption->bindParam(':examC_text', $option['text']);
+            $isCorrect = $option['isCorrect'];
+            $stmtOption->bindParam(':examC_isCorrect', $isCorrect);
+            $stmtOption->execute();
+          }
+        }
+      }
+      $conn->commit();
+      return 1;
+    } catch (\Throwable $th) {
+      $conn->rollBack();
+      return $th;
+    }
+  }
+
+  function updateExamQuestion($json)
+  {
+    // {"questionId": 6, "text": "What is the capital of Francessss?", "typeId": 1, "points": 10, "options": [{"text": "Parisssss", "isCorrect": 1}, {"text": "Londonssss", "isCorrect": 0}, {"text": "Berlinsssss", "isCorrect": 0}, {"text": "Madriddddd", "isCorrect": 0}]}
+    include "connection.php";
+    $conn->beginTransaction();
+    try {
+      $data = json_decode($json, true);
+      $currentDate = $this->getCurrentDate();
+
+      $sqlUpdateQuestion = "UPDATE tblexamquestion SET examQ_text = :examQ_text, examQ_typeId = :examQ_typeId,
+                            examQ_updatedAt = :examQ_updatedAt, examQ_points = :examQ_points WHERE examQ_id = :examQ_id";
+      $stmtUpdateQuestion = $conn->prepare($sqlUpdateQuestion);
+      $stmtUpdateQuestion->bindParam(':examQ_text', $data['text']);
+      $stmtUpdateQuestion->bindParam(':examQ_typeId', $data['typeId']);
+      $stmtUpdateQuestion->bindParam(':examQ_updatedAt', $currentDate);
+      $stmtUpdateQuestion->bindParam(':examQ_points', $data['points']);
+      $stmtUpdateQuestion->bindParam(':examQ_id', $data['questionId']);
+      $stmtUpdateQuestion->execute();
+
+      $sqlDeleteOptions = "DELETE FROM tblexamchoices WHERE examC_questionId = :examQ_id";
+      $stmtDeleteOptions = $conn->prepare($sqlDeleteOptions);
+      $stmtDeleteOptions->bindParam(':examQ_id', $data['questionId']);
+      $stmtDeleteOptions->execute();
+
+      if (isset($data['options']) && is_array($data['options'])) {
+        $sqlInsertOption = "INSERT INTO tblexamchoices(examC_questionId, examC_text, examC_isCorrect)
+                            VALUES (:examC_questionId, :examC_text, :examC_isCorrect)";
+        $stmtInsertOption = $conn->prepare($sqlInsertOption);
+        foreach ($data['options'] as $option) {
+          $stmtInsertOption->bindParam(':examC_questionId', $data['questionId']);
+          $stmtInsertOption->bindParam(':examC_text', $option['text']);
+          $isCorrect = $option['isCorrect'];
+          $stmtInsertOption->bindParam(':examC_isCorrect', $isCorrect);
+          $stmtInsertOption->execute();
+        }
+      }
+
+      $conn->commit();
+      return 1;
+    } catch (\Throwable $th) {
+      $conn->rollBack();
+      return $th;
+    }
+  }
+
+  function updateExamMaster($json)
+  {
+    // {"examId": 2, "name": "Sample Exam", "duration": 60}
+    include "connection.php";
+    $data = json_decode($json, true);
+    $dateNow = $this->getCurrentDate();
+    $sql = "UPDATE tblexam SET exam_name = :exam_name, exam_duration = :exam_duration, exam_updatedAt = :exam_updatedAt WHERE exam_id = :exam_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':exam_id', $data['examId']);
+    $stmt->bindParam(':exam_name', $data['name']);
+    $stmt->bindParam(':exam_duration', $data['duration']);
+    $stmt->bindParam(':exam_updatedAt', $dateNow);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function getCourseCategory()
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tblcoursescategory";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getCourse()
+  {
+    include "connection.php";
+    $sql = "SELECT a.courses_id, b.course_categoryId, c.crs_type_id, a.courses_name, b.course_categoryName, c.crs_type_name FROM tblcourses a
+            INNER JOIN tblcoursescategory b ON b.course_categoryId = a.courses_coursecategoryId
+            INNER JOIN tblcoursetype c ON c.crs_type_id = a.courses_courseTypeId
+            ORDER BY a.courses_name";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getInstitution()
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tblinstitution";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getKnowledge()
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tblpersonalknowledge";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getLicenseMaster()
+  {
+    include "connection.php";
+    $sql = "SELECT a.license_master_id, b.license_type_id, a.license_master_name, b.license_type_name FROM tbllicensemaster a
+            INNER JOIN tbllicensetype b ON b.license_type_id = a.license_master_typeId
+            ORDER BY a.license_master_name";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getLicenseType()
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tbllicensetype";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getSkills()
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tblpersonalskills";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getTraining()
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tblpersonaltraining";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getCourseType()
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tblcoursetype";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getAddCourseDropdown()
+  {
+    include "connection.php";
+    $returnValue = [];
+    $returnValue['courseCategory'] = $this->getCourseCategory();
+    $returnValue['courseType'] = $this->getCourseType();
+    return json_encode($returnValue);
+  }
+
+  function addCourseCategory($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "INSERT INTO tblcoursescategory(course_categoryName) VALUES (:course_categoryName)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':course_categoryName', $data["courseCategoryName"]);
+    $stmt->execute();
+    $newId = $conn->lastInsertId();
+    return $stmt->rowCount() > 0 ? $newId : 0;
+  }
+
+  function addCourse($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "INSERT INTO tblcourses(courses_coursecategoryId, courses_courseTypeId, courses_name) VALUES (:courses_coursecategoryId, :courses_courseTypeId, :courses_name)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':courses_coursecategoryId', $data['courseCategory']);
+    $stmt->bindParam(':courses_courseTypeId', $data['courseType']);
+    $stmt->bindParam(':courses_name', $data['courseName']);
+    $stmt->execute();
+    $newId = $conn->lastInsertId();
+    return $stmt->rowCount() > 0 ? $newId : 0;
+  }
+
+  function addInstitution($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "INSERT INTO tblinstitution(institution_name) VALUES (:institution_name)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':institution_name', $data['institutionName']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $conn->lastInsertId() : 0;
+  }
+
+  function addKnowledge($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "INSERT INTO tblpersonalknowledge(knowledge_name) VALUES (:knowledge_name)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':knowledge_name', $data['knowledgeName']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $conn->lastInsertId() : 0;
+  }
+
+  function addLicenseMaster($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "INSERT INTO tbllicensemaster(license_master_name, license_master_typeId) VALUES (:license_master_name, :license_master_typeId)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':license_master_name', $data['licenseName']);
+    $stmt->bindParam(':license_master_typeId', $data['licenseType']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $conn->lastInsertId() : 0;
+  }
+
+  function addLicenseType($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "INSERT INTO tbllicensetype(license_type_name) VALUES (:license_type_name)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':license_type_name', $data['licenseTypeName']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $conn->lastInsertId() : 0;
+  }
+
+  function addSkills($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "INSERT INTO tblpersonalskills(perS_name) VALUES (:skills_name)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':skills_name', $data['skillName']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $conn->lastInsertId() : 0;
+  }
+
+  function addTraining($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "INSERT INTO tblpersonaltraining(perT_name) VALUES (:perT_name)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':perT_name', $data['trainingName']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $conn->lastInsertId() : 0;
+  }
+
+  function updateCourseCategory($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tblcoursescategory SET course_categoryName = :course_categoryName WHERE course_categoryId = :course_categoryId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':course_categoryName', $data['courseCategoryName']);
+    $stmt->bindParam(':course_categoryId', $data['courseCategoryId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function updateCourse($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tblcourses SET courses_coursecategoryId = :courses_coursecategoryId, courses_courseTypeId = :courses_courseTypeId, courses_name = :courses_name WHERE courses_id = :courses_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':courses_coursecategoryId', $data['courseCategory']);
+    $stmt->bindParam(':courses_courseTypeId', $data['courseType']);
+    $stmt->bindParam(':courses_name', $data['courseName']);
+    $stmt->bindParam(':courses_id', $data['courseId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function updateInstitution($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tblinstitution SET institution_name = :institution_name WHERE institution_id = :institution_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':institution_name', $data['institutionName']);
+    $stmt->bindParam(':institution_id', $data['institutionId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function updateKnowledge($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tblpersonalknowledge SET knowledge_name = :knowledge_name WHERE knowledge_id = :knowledge_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':knowledge_name', $data['knowledgeName']);
+    $stmt->bindParam(':knowledge_id', $data['knowledgeId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function updateLicenseMaster($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tbllicensemaster SET license_master_name = :license_master_name, license_master_typeId = :license_master_typeId WHERE license_master_id = :license_master_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':license_master_name', $data['licenseName']);
+    $stmt->bindParam(':license_master_typeId', $data['licenseType']);
+    $stmt->bindParam(':license_master_id', $data['licenseId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function updateLicenseType($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tbllicensetype SET license_type_name = :license_type_name WHERE license_type_id = :license_type_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':license_type_name', $data['licenseTypeName']);
+    $stmt->bindParam(':license_type_id', $data['licenseTypeId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function updateSkill($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tblpersonalskills SET perS_name = :perS_name WHERE perS_id = :perS_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':perS_name', $data['skillName']);
+    $stmt->bindParam(':perS_id', $data['skillId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function updateTraining($json)
+  {
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "UPDATE tblpersonaltraining SET perT_name = :perT_name WHERE perT_id = :perT_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':perT_name', $data['trainingName']);
+    $stmt->bindParam(':perT_id', $data['trainingId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+
+  function deleteCourseCategory($json)
+  {
+    // {"courseCategoryId": 1}
+    include "connection.php";
+    $data = json_decode($json, true);
+    try {
+      $sql = "DELETE FROM tblcoursescategory WHERE course_categoryId = :course_categoryId";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':course_categoryId', $data['courseCategoryId']);
+      $stmt->execute();
+      return $stmt->rowCount() > 0 ? 1 : 0;
+    } catch (PDOException $e) {
+      if ($e->getCode() == '23000') {
+        // Foreign key constraint violation
+        return -1;
+      }
+      // throw 0;
+    }
+  }
+
+  function deleteCourse($json)
+  {
+    // {"courseId": 1}
+    include "connection.php";
+    $data = json_decode($json, true);
+    try {
+      $sql = "DELETE FROM tblcourses WHERE courses_id = :courses_id";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':courses_id', $data['courseId']);
+      $stmt->execute();
+      return $stmt->rowCount() > 0 ? 1 : 0;
+    } catch (PDOException $e) {
+      if ($e->getCode() == '23000') {
+        // Foreign key constraint violation
+        return -1;
+      }
+      throw $e;
+    }
+  }
+
+  function deleteInstitution($json)
+  {
+    // {"institutionId": 1}
+    include "connection.php";
+    $data = json_decode($json, true);
+    try {
+      $sql = "DELETE FROM tblinstitution WHERE institution_id = :institution_id";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':institution_id', $data['institutionId']);
+      $stmt->execute();
+      return $stmt->rowCount() > 0 ? 1 : 0;
+    } catch (PDOException $e) {
+      if ($e->getCode() == '23000') {
+        // Foreign key constraint violation
+        return -1;
+      }
+      throw $e;
+    }
+  }
+
+  function deleteKnowledge($json)
+  {
+    // {"knowledgeId": 1}
+    include "connection.php";
+    $data = json_decode($json, true);
+    try {
+      $sql = "DELETE FROM tblpersonalknowledge WHERE knowledge_id = :knowledge_id";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':knowledge_id', $data['knowledgeId']);
+      $stmt->execute();
+      return $stmt->rowCount() > 0 ? 1 : 0;
+    } catch (PDOException $e) {
+      if ($e->getCode() == '23000') {
+        // Foreign key constraint violation
+        return -1;
+      }
+      throw $e;
+    }
+  }
+
+  function deleteLicenseMaster($json)
+  {
+    // {"licenseMasterId": 1}
+    include "connection.php";
+    $data = json_decode($json, true);
+    try {
+      $sql = "DELETE FROM tbllicensemaster WHERE license_master_id = :license_master_id";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':license_master_id', $data['licenseId']);
+      $stmt->execute();
+      return $stmt->rowCount() > 0 ? 1 : 0;
+    } catch (PDOException $e) {
+      if ($e->getCode() == '23000') {
+        // Foreign key constraint violation
+        return -1;
+      }
+      throw $e;
+    }
+  }
+
+  function deleteLicenseType($json)
+  {
+    // {"licenseTypeId": 1}
+    include "connection.php";
+    $data = json_decode($json, true);
+    try {
+      $sql = "DELETE FROM tbllicensetype WHERE license_type_id = :license_type_id";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':license_type_id', $data['licenseTypeId']);
+      $stmt->execute();
+      return $stmt->rowCount() > 0 ? 1 : 0;
+    } catch (PDOException $e) {
+      if ($e->getCode() == '23000') {
+        // Foreign key constraint violation
+        return -1;
+      }
+      throw $e;
+    }
+  }
+
+  function deleteSkill($json)
+  {
+    // {"skillId": 1}
+    include "connection.php";
+    $data = json_decode($json, true);
+    try {
+      $sql = "DELETE FROM tblpersonalskills WHERE perS_id = :perS_id";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':perS_id', $data['skillId']);
+      $stmt->execute();
+      return $stmt->rowCount() > 0 ? 1 : 0;
+    } catch (PDOException $e) {
+      if ($e->getCode() == '23000') {
+        // Foreign key constraint violation
+        return -1;
+      }
+      throw $e;
+    }
+  }
+
+  function deleteTraining($json)
+  {
+    // {"trainingId": 1}
+    include "connection.php";
+    $data = json_decode($json, true);
+    try {
+      $sql = "DELETE FROM tblpersonaltraining WHERE perT_id = :perT_id";
+      $stmt = $conn->prepare($sql);
+      $stmt->bindParam(':perT_id', $data['trainingId']);
+      $stmt->execute();
+      return $stmt->rowCount() > 0 ? 1 : 0;
+    } catch (PDOException $e) {
+      if ($e->getCode() == '23000') {
+        // Foreign key constraint violation
+        return -1;
+      }
+      throw $e;
+    }
+  }
+
+
+  function getGeneralExam()
+  {
+    include "connection.php";
+    $sql = "SELECT * FROM tblexam WHERE exam_typeId  = 1";
+    $stmt = $conn->prepare($sql);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function getGeneralExamDetails()
+  {
+    include "connection.php";
+    $returnValue = [];
+    $exam = $this->getGeneralExam();
+    if ($exam !== 0) {
+      $returnValue['examMaster'] = $exam;
+      $returnValue['questionMaster'] = $this->getExamQuestions($exam[0]['exam_id']);
+    } else {
+      $returnValue = 0;
+    }
+    return $returnValue;
+  }
+
+  function getCandidateExamPoints($json)
+  {
+    // {"candidateId": 7, "examId": 1}
+    include "connection.php";
+    $data = json_decode($json, true);
+    $sql = "SELECT * FROM tblexamresult WHERE examR_candId = :candidateId AND examR_examId = :examId";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':candidateId', $data['candidateId']);
+    $stmt->bindParam(':examId', $data['examId']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+  }
+
+  function sendJobOffer($json)
+  {
+    // {"candId": 7, "jobId": 11, "statusId": 1, "salary": 10000, "document": "document", "expiryDate": "2024-01-01"}
+    include "connection.php";
+    $data = json_decode($json, true);
+    $date = $this->getCurrentDate();
+    $sql = "INSERT INTO tbljoboffer(joboffer_candId, joboffer_jobMId, joboffer_date, joboffer_statusId, joboffer_salary, joboffer_document, joboffer_expiryDate)
+            VALUES (:joboffer_candId, :joboffer_jobMId, :joboffer_date, :joboffer_statusId, :joboffer_salary, :joboffer_document, :joboffer_expiryDate)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':joboffer_candId', $data['candId']);
+    $stmt->bindParam(':joboffer_jobMId', $data['jobId']);
+    $stmt->bindParam(':joboffer_date', $date);
+    $stmt->bindParam(':joboffer_statusId', $data['statusId']);
+    $stmt->bindParam(':joboffer_salary', $data['salary']);
+    $stmt->bindParam(':joboffer_document', $data['document']);
+    $stmt->bindParam(':joboffer_expiryDate', $data['expiryDate']);
+    $stmt->execute();
+    return $stmt->rowCount() > 0 ? 1 : 0;
+  }
+} //admin
 
 $json = isset($_POST["json"]) ? $_POST["json"] : "0";
 $operation = isset($_POST["operation"]) ? $_POST["operation"] : "0";
@@ -1410,20 +2082,8 @@ switch ($operation) {
   case "getCandidateProfile":
     echo $admin->getCandidateProfile($json);
     break;
-  case "addInterviewMaster":
-    echo $admin->addInterviewMaster($json);
-    break;
   case "getJobInterviewDetails":
     echo $admin->getJobInterviewDetails($json);
-    break;
-  case "updateInterviewMaster":
-    echo $admin->updateInterviewMaster($json);
-    break;
-  case "updateInterviewCriteria":
-    echo $admin->updateInterviewCriteria($json);
-    break;
-  case "addInterviewCriteria":
-    echo $admin->addInterviewCriteria($json);
     break;
   case "deleteInterviewCriteria":
     echo $admin->deleteInterviewCriteria($json);
@@ -1431,14 +2091,161 @@ switch ($operation) {
   case "changeApplicantStatus":
     echo $admin->changeApplicantStatus($json);
     break;
-  case "getCriteriaForInterview":
-    echo json_encode($admin->getCriteriaForInterview($json));
-    break;
   case "scoreInterviewApplicant":
     echo $admin->scoreInterviewApplicant($json);
     break;
+  case "getInterviewCategory":
+    echo json_encode($admin->getInterviewCategory());
+    break;
+  case "addInterviewCriteriaMaster":
+    echo $admin->addInterviewCriteriaMaster($json);
+    break;
+  case "getInterviewCriteriaMaster":
+    echo json_encode($admin->getInterviewCriteriaMaster($json));
+    break;
+  case "getInterviewCriteria":
+    echo json_encode($admin->getInterviewCriteria($json));
+    break;
+  case "getCriteriaAndCategory":
+    echo $admin->getCriteriaAndCategory($json);
+    break;
+  case "getCriteriaForInterview":
+    echo json_encode($admin->getCriteriaForInterview($json));
+    break;
   case "getCandInterviewResult":
     echo $admin->getCandInterviewResult($json);
+    break;
+  case "updateJobPassingPercent":
+    echo $admin->updateJobPassingPercent($json);
+    break;
+  case "updateInterviewPassingPercent":
+    echo $admin->updateInterviewPassingPercent($json);
+    break;
+  case "addExam":
+    echo $admin->addExam($json);
+    break;
+  case "getExamDetails":
+    echo $admin->getExamDetails($json);
+    break;
+  case "addExamQuestions":
+    echo $admin->addExamQuestions($json);
+    break;
+  case "updateExamQuestion":
+    echo $admin->updateExamQuestion($json);
+    break;
+  case "updateExamMaster":
+    echo $admin->updateExamMaster($json);
+    break;
+  case "getCourseCategory":
+    echo json_encode($admin->getCourseCategory());
+    break;
+  case "getCourse":
+    echo json_encode($admin->getCourse());
+    break;
+  case "getInstitution":
+    echo json_encode($admin->getInstitution());
+    break;
+  case "getKnowledge":
+    echo json_encode($admin->getKnowledge());
+    break;
+  case "getLicenseMaster":
+    echo json_encode($admin->getLicenseMaster());
+    break;
+  case "getLicenseType":
+    echo json_encode($admin->getLicenseType());
+    break;
+  case "getSkills":
+    echo json_encode($admin->getSkills());
+    break;
+  case "getTraining":
+    echo json_encode($admin->getTraining());
+    break;
+  case "addCourseCategory":
+    echo $admin->addCourseCategory($json);
+    break;
+  case "getAddCourseDropdown":
+    echo $admin->getAddCourseDropdown();
+    break;
+  case "addCourse":
+    echo $admin->addCourse($json);
+    break;
+  case "addInstitution":
+    echo $admin->addInstitution($json);
+    break;
+  case "addKnowledge":
+    echo $admin->addKnowledge($json);
+    break;
+  case "addLicenseMaster":
+    echo $admin->addLicenseMaster($json);
+    break;
+  case "addLicenseType":
+    echo $admin->addLicenseType($json);
+    break;
+  case "addSkills":
+    echo $admin->addSkills($json);
+    break;
+  case "addTraining":
+    echo $admin->addTraining($json);
+    break;
+  case "updateCourseCategory":
+    echo $admin->updateCourseCategory($json);
+    break;
+  case "updateCourse":
+    echo $admin->updateCourse($json);
+    break;
+  case "updateInstitution":
+    echo $admin->updateInstitution($json);
+    break;
+  case "updateKnowledge":
+    echo $admin->updateKnowledge($json);
+    break;
+  case "deleteCourseCategory":
+    echo $admin->deleteCourseCategory($json);
+    break;
+  case "deleteCourse":
+    echo $admin->deleteCourse($json);
+    break;
+  case "deleteInstitution":
+    echo $admin->deleteInstitution($json);
+    break;
+  case "deleteKnowledge":
+    echo $admin->deleteKnowledge($json);
+    break;
+  case "getGeneralExam":
+    echo json_encode($admin->getGeneralExam());
+    break;
+  case "getGeneralExamDetails":
+    echo json_encode($admin->getGeneralExamDetails());
+    break;
+  case "updateLicenseMaster":
+    echo $admin->updateLicenseMaster($json);
+    break;
+  case "deleteLicenseMaster":
+    echo $admin->deleteLicenseMaster($json);
+    break;
+  case "updateLicenseType":
+    echo $admin->updateLicenseType($json);
+    break;
+  case "deleteLicenseType":
+    echo $admin->deleteLicenseType($json);
+    break;
+  case "updateSkill":
+    echo $admin->updateSkill($json);
+    break;
+  case "deleteSkill":
+    echo $admin->deleteSkill($json);
+    break;
+  case "updateTraining":
+    echo $admin->updateTraining($json);
+    break;
+  case "deleteTraining":
+    echo $admin->deleteTraining($json);
+    break;
+  case "getCandidateExamPoints":
+    echo json_encode($admin->getCandidateExamPoints($json));
+    break;
+  case "sendJobOffer":
+    echo $admin->sendJobOffer($json);
     break;
   default:
     echo "WALAY '" . $operation . "' NGA OPERATION SA UBOS HAHAHAHA BOBO";

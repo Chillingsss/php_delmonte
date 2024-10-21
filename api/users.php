@@ -387,31 +387,34 @@ function getPinCodeEmailUpdate($json) {
 
 
 
-function getPinCode($json) {
-  include "connection.php";
-  include "send_email.php";
+function getPinCode($json)
+  {
+    // {"email": "qkyusans@gmail"}
+    include "connection.php";
+    include "send_email.php";
 
-  $data = json_decode($json, true);
+    $data = json_decode($json, true);
+    if (recordExists($data['email'], "tblcandidates", "email")) return -1;
 
-  // Ensure the email exists in the database
-  if (!recordExists($data['email'], "tblcandidates", "cand_email")) {
-      return json_encode(["error" => "Email not found"]);
+    $firstLetter = strtoupper(substr($data['email'], 0, 1));
+    $thirdLetter = strtoupper(substr($data['email'], 2, 1));
+    $pincode = $firstLetter . rand(100, 999) . $thirdLetter . rand(10000, 99999);
+
+    $currentDateTime = new DateTime("now", new DateTimeZone('Asia/Manila'));
+    $expirationDateTime = $currentDateTime->add(new DateInterval('PT15M'));
+    $expirationTimestamp = $expirationDateTime->format('Y-m-d H:i:s');
+
+    // $sql = "INSERT INTO tbl_pincode (pin_email, pin_code, pin_expiration_date) VALUES (:email, :pincode, :pin_expiration_date)";
+    // $stmt = $conn->prepare($sql);
+    // $stmt->bindParam(':email', $data['email']);
+    // $stmt->bindParam(':pincode', $pincode);
+    // $stmt->bindParam(':pin_expiration_date', $expirationTimestamp);
+    // $stmt->execute();
+    $sendEmail = new SendEmail();
+    $sendEmail->sendEmail($data['email'], $pincode . " - Your PIN Code", "Please use the following code to complete the first step:<br /><br /> <b>$pincode</b>");
+
+    return json_encode(["pincode" => $pincode, "expirationDate" => $expirationTimestamp]);
   }
-
-  $firstLetter = strtoupper(substr($data['email'], 0, 1));
-  $thirdLetter = strtoupper(substr($data['email'], 2, 1));
-  $pincode = $firstLetter . rand(100, 999) . $thirdLetter . rand(10000, 99999);
-
-  $currentDateTime = new DateTime("now", new DateTimeZone('Asia/Manila'));
-  $expirationDateTime = $currentDateTime->add(new DateInterval('PT15M'));
-  $expirationTimestamp = $expirationDateTime->format('Y-m-d H:i:s');
-
-  // Send the PIN code via email
-  $sendEmail = new SendEmail();
-  $sendEmail->sendEmail($data['email'], $pincode . " - Your PIN Code", "Please use the following code:<br /><br /> <b>$pincode</b>");
-
-  return json_encode(["pincode" => $pincode, "expirationDate" => $expirationTimestamp]);
-}
 
 
 
@@ -534,7 +537,7 @@ function isEmailExist($json)
       include "connection.php";
 
       $sql = "
-        SELECT a.jobM_id, a.jobM_title, a.jobM_description, a.jobM_status, a.jobM_passpercentage,
+        SELECT a.jobM_id, a.jobM_title, a.jobM_description, a.jobM_status, a.jobM_passpercentage, o.passing_points,
                DATE_FORMAT(a.jobM_createdAt, '%b %d, %Y %h:%i %p') as jobM_createdAt,
                GROUP_CONCAT(DISTINCT c.duties_text SEPARATOR '|') as duties_text,
                GROUP_CONCAT(DISTINCT k.course_categoryName SEPARATOR '|') as course_categoryName,
@@ -561,6 +564,7 @@ function isEmailExist($json)
         LEFT JOIN tbljobslicense l ON a.jobM_id = l.jlicense_jobId
         LEFT JOIN tbllicensemaster m ON l.jlicense_licenceMId = m.license_master_id
         LEFT JOIN tbllicensetype n ON m.license_master_typeId = n.license_type_id
+        LEFT JOIN tbljobpassing o ON a.jobM_id = o.passing_jobId
         WHERE a.jobM_status = 1
         GROUP BY a.jobM_id
         ORDER BY a.jobM_createdAt DESC";
@@ -603,7 +607,8 @@ function getAppliedJobs() {
                     b.app_id,
                     b.app_datetime,
                     e.appS_id,
-                    a.jobM_passpercentage
+                    a.jobM_passpercentage,
+                    o.passing_points
                 FROM tbljobsmaster a
                 INNER JOIN tblapplications b ON a.jobM_id = b.app_jobMId
                 INNER JOIN (
@@ -613,6 +618,8 @@ function getAppliedJobs() {
                 ) c ON b.app_id = c.appS_appId
                 INNER JOIN tblapplicationstatus e ON c.max_appS_id = e.appS_id
                 INNER JOIN tblstatus d ON e.appS_statusId = d.status_id
+                LEFT JOIN tbljobpassing o ON a.jobM_id = o.passing_jobId
+
                 WHERE b.app_candId = :cand_id
                 ORDER BY b.app_datetime DESC";
 
@@ -935,6 +942,63 @@ function updateCandidatePersonalInfo($json) {
   }
 }
 
+// function updateEducationalBackground($json)
+// {
+//     include "connection.php";
+//     $conn->beginTransaction();
+//     try {
+//         $json = json_decode($json, true);
+//         $candidateId = $json['candidateId'] ?? 0;
+//         $educationalBackground = $json['educationalBackground'] ?? [];
+
+//         if (!empty($educationalBackground)) {
+//             foreach ($educationalBackground as $item) {
+//                 if (isset($item['educId']) && !empty($item['educId'])) {
+
+//                     if (isset($item['deleteFlag']) && $item['deleteFlag'] === true) {
+
+//                         $sql = "DELETE FROM tblcandeducbackground WHERE educ_canId = :candidateId AND educ_back_id = :educ_back_id";
+//                         $stmt = $conn->prepare($sql);
+//                         $stmt->bindParam(':candidateId', $candidateId);
+//                         $stmt->bindParam(':educ_back_id', $item['educId']);
+//                         $stmt->execute();
+//                     } else {
+
+//                         $sql = "UPDATE tblcandeducbackground
+//                                 SET educ_coursesId = :educational_courses_id,
+//                                     educ_institutionId = :educational_institution_id,
+//                                     educ_dateGraduate = :educational_date_graduate
+//                                 WHERE educ_back_id = :educ_back_id";
+//                         $stmt = $conn->prepare($sql);
+//                         $stmt->bindParam(':educational_courses_id', $item['courseId']);
+//                         $stmt->bindParam(':educational_institution_id', $item['institutionId']);
+//                         $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
+//                         $stmt->bindParam(':educ_back_id', $item['educId']);
+//                         $stmt->execute();
+//                     }
+//                 } else {
+
+//                     $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesId, educ_institutionId, educ_dateGraduate)
+//                             VALUES (:personal_info_id, :educational_courses_id, :educational_institution_id, :educational_date_graduate)";
+//                     $stmt = $conn->prepare($sql);
+//                     $stmt->bindParam(':personal_info_id', $candidateId);
+//                     $stmt->bindParam(':educational_courses_id', $item['courseId']);
+//                     $stmt->bindParam(':educational_institution_id', $item['institutionId']);
+//                     $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
+//                     $stmt->execute();
+//                 }
+//             }
+//         }
+
+//         $conn->commit();
+//         return 1; // Success
+
+//     } catch (PDOException $th) {
+//         $conn->rollBack();
+//         return 0; // Failure
+//     }
+// }
+
 function updateEducationalBackground($json)
 {
     include "connection.php";
@@ -946,37 +1010,81 @@ function updateEducationalBackground($json)
 
         if (!empty($educationalBackground)) {
             foreach ($educationalBackground as $item) {
+
+                $courseId = $item['courseId'] ?? null;
+                $institutionId = $item['institutionId'] ?? null;
+                $courseCategoryId = $item['courseCategoryId'] ?? null;
+                $courseTypeId = $item['courseTypeId'] ?? null;
+
+
+
+
+
+                if ($courseCategoryId === "custom" && !empty($item['customCourseCategory'])) {
+                    $sql = "INSERT INTO tblcoursescategory (course_categoryName) VALUES (:course_categoryName)";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(':course_categoryName', $item['customCourseCategory']);
+                    $stmt->execute();
+                    $courseCategoryId = $conn->lastInsertId();
+                }
+
+
+                if ($courseTypeId === "custom" && !empty($item['customCourseType'])) {
+                    $sql = "INSERT INTO tblcoursetype (crs_type_name) VALUES (:crs_type_name)";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(':crs_type_name', $item['customCourseType']);
+                    $stmt->execute();
+                    $courseTypeId = $conn->lastInsertId();
+                }
+
+                if ($courseId === "custom" && !empty($item['customCourse'])) {
+                  $sql = "INSERT INTO tblcourses (courses_name, courses_coursecategoryId, courses_courseTypeId) VALUES (:course_name, :course_category_id, :course_type_id)";
+                  $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':course_name', $item['customCourse']);
+                  $stmt->bindParam(':course_category_id', $courseCategoryId);
+                  $stmt->bindParam(':course_type_id', $courseTypeId);
+                  $stmt->execute();
+                  $courseId = $conn->lastInsertId();
+              }
+
+                // Check if custom institution
+                if ($institutionId === "custom" && !empty($item['customInstitution'])) {
+                    $sql = "INSERT INTO tblinstitution (institution_name) VALUES (:institution_name)";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(':institution_name', $item['customInstitution']);
+                    $stmt->execute();
+                    $institutionId = $conn->lastInsertId(); // Get last inserted ID
+                }
+
+                // Check if educId exists for update or delete
                 if (isset($item['educId']) && !empty($item['educId'])) {
-
                     if (isset($item['deleteFlag']) && $item['deleteFlag'] === true) {
-
                         $sql = "DELETE FROM tblcandeducbackground WHERE educ_canId = :candidateId AND educ_back_id = :educ_back_id";
                         $stmt = $conn->prepare($sql);
                         $stmt->bindParam(':candidateId', $candidateId);
                         $stmt->bindParam(':educ_back_id', $item['educId']);
                         $stmt->execute();
                     } else {
-
                         $sql = "UPDATE tblcandeducbackground
                                 SET educ_coursesId = :educational_courses_id,
                                     educ_institutionId = :educational_institution_id,
                                     educ_dateGraduate = :educational_date_graduate
                                 WHERE educ_back_id = :educ_back_id";
                         $stmt = $conn->prepare($sql);
-                        $stmt->bindParam(':educational_courses_id', $item['courseId']);
-                        $stmt->bindParam(':educational_institution_id', $item['institutionId']);
+                        $stmt->bindParam(':educational_courses_id', $courseId);
+                        $stmt->bindParam(':educational_institution_id', $institutionId);
                         $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
                         $stmt->bindParam(':educ_back_id', $item['educId']);
                         $stmt->execute();
                     }
                 } else {
-
+                    // If educId is not set, insert a new record
                     $sql = "INSERT INTO tblcandeducbackground (educ_canId, educ_coursesId, educ_institutionId, educ_dateGraduate)
                             VALUES (:personal_info_id, :educational_courses_id, :educational_institution_id, :educational_date_graduate)";
                     $stmt = $conn->prepare($sql);
                     $stmt->bindParam(':personal_info_id', $candidateId);
-                    $stmt->bindParam(':educational_courses_id', $item['courseId']);
-                    $stmt->bindParam(':educational_institution_id', $item['institutionId']);
+                    $stmt->bindParam(':educational_courses_id', $courseId);
+                    $stmt->bindParam(':educational_institution_id', $institutionId);
                     $stmt->bindParam(':educational_date_graduate', $item['courseDateGraduated']);
                     $stmt->execute();
                 }
@@ -1640,8 +1748,8 @@ function insertExamResult($json) {
           $conn->beginTransaction();
 
 
-          $sql = "INSERT INTO tblexamresult (examR_candId, examR_examId, examR_score, examR_totalscore, examR_status)
-                  VALUES (:candId, :examId, :score, :totalScore, :status)";
+          $sql = "INSERT INTO tblexamresult (examR_candId, examR_examId, examR_score, examR_totalscore, examR_status, examR_date)
+                  VALUES (:candId, :examId, :score, :totalScore, :status, NOW())";
           $stmt = $conn->prepare($sql);
           $stmt->bindParam(':candId', $candId, PDO::PARAM_INT);
           $stmt->bindParam(':examId', $examId, PDO::PARAM_INT);
