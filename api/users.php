@@ -1288,70 +1288,59 @@ function updateCandidateSkills($json) {
               $skills_id = $item['skills_id'] ?? null;
               $deleteFlag = $item['deleteFlag'] ?? false;
 
+              // Handle custom skills
+              if ($skillId === "custom" && !empty($item['customSkill'])) {
+                  // Insert custom skill into tblpersonalskills
+                  $sql = "INSERT INTO tblpersonalskills (perS_name) VALUES (:perS_name)";
+                  $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':perS_name', $item['customSkill']);
+                  $stmt->execute();
+                  $skillId = $conn->lastInsertId();
+              }
+
               if ($deleteFlag) {
-                  // Delete the skill record
+                  // Delete the skill record from tblcandskills
                   $sql = "DELETE FROM tblcandskills WHERE skills_id = :skills_id AND skills_candId = :skills_candId";
                   $stmt = $conn->prepare($sql);
                   $stmt->bindParam(':skills_id', $skills_id);
                   $stmt->bindParam(':skills_candId', $candidateId);
                   $stmt->execute();
               } else {
-                  if ($skills_id) {
-                      // Check for existing skill association
-                      $sql = "SELECT skills_perSId FROM tblcandskills
+                  // Check if skills_id exists for update
+                  if (!empty($skills_id)) {
+                      // Update existing skill in tblcandskills
+                      $sql = "UPDATE tblcandskills
+                              SET skills_perSId = :skills_perSId
                               WHERE skills_id = :skills_id AND skills_candId = :skills_candId";
                       $stmt = $conn->prepare($sql);
+                      $stmt->bindParam(':skills_perSId', $skillId); // Use skills_id from tblpersonalskills
                       $stmt->bindParam(':skills_id', $skills_id);
                       $stmt->bindParam(':skills_candId', $candidateId);
                       $stmt->execute();
-
-                      $existingSkill = $stmt->fetchColumn();
-
-                      if ($existingSkill !== $skillId) {
-                          // Update existing skill
-                          $sql = "UPDATE tblcandskills
-                                  SET skills_perSId = :skills_perSId
-                                  WHERE skills_id = :skills_id AND skills_candId = :skills_candId";
-                          $stmt = $conn->prepare($sql);
-                          $stmt->bindParam(':skills_perSId', $skillId);
-                          $stmt->bindParam(':skills_id', $skills_id);
-                          $stmt->bindParam(':skills_candId', $candidateId);
-                          $stmt->execute();
-                      }
                   } else {
-                      // Check if the skill already exists for the candidate
-                      $sql = "SELECT skills_id FROM tblcandskills
-                              WHERE skills_candId = :skills_candId AND skills_perSId = :skills_perSId";
+                      // Insert a new skill if it does not exist
+                      $sql = "INSERT INTO tblcandskills (skills_candId, skills_perSId)
+                              VALUES (:skills_candId, :skills_perSId)";
                       $stmt = $conn->prepare($sql);
                       $stmt->bindParam(':skills_candId', $candidateId);
-                      $stmt->bindParam(':skills_perSId', $skillId);
+                      $stmt->bindParam(':skills_perSId', $skillId); // Here, we pass the skills_id from tblpersonalskills
                       $stmt->execute();
-
-                      if ($stmt->rowCount() === 0) {
-                          // Skill does not exist, insert new skill
-                          $sql = "INSERT INTO tblcandskills (skills_candId, skills_perSId)
-                                  VALUES (:skills_candId, :skills_perSId)";
-                          $stmt = $conn->prepare($sql);
-                          $stmt->bindParam(':skills_candId', $candidateId);
-                          $stmt->bindParam(':skills_perSId', $skillId);
-                          $stmt->execute();
-                      } else {
-                          // Skill already exists for the candidate
-                          return 0; // Indicate that the skill is already associated
-                      }
                   }
               }
           }
       }
 
       $conn->commit();
-      return 1;
+      return 1; // Success
+
   } catch (PDOException $e) {
       $conn->rollBack();
       error_log("Error updating, inserting, or deleting skills: " . $e->getMessage());
-      return 0;
+      return 0; // Failure
   }
 }
+
+
 
 
 
