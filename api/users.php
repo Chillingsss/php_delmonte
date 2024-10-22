@@ -275,6 +275,15 @@ function getLicense()
   return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
 }
 
+function getLicenseType()
+{
+  include "connection.php";
+  $sql = "SELECT * FROM tbllicensetype";
+  $stmt = $conn->prepare($sql);
+  $stmt->execute();
+  return $stmt->rowCount() > 0 ? json_encode($stmt->fetchAll(PDO::FETCH_ASSOC)) : 0;
+}
+
 // function getPinCodeUpdate($json)
 // {
 //     // {"email": "qkyusans@gmail.com"}
@@ -1438,6 +1447,15 @@ function updateCandidateKnowledge($json) {
               $deleteFlag = $item['deleteFlag'] ?? false;
 
 
+              if ($knowledge_id === "custom" && !empty($item['customKnowledge'])) {
+                $sql = "INSERT INTO tblpersonalknowledge (knowledge_name) VALUES (:knowledge_name)";
+                $stmt = $conn->prepare($sql);
+                $stmt->bindParam(':knowledge_name', $item['customKnowledge']);
+                $stmt->execute();
+                $knowledge_id = $conn->lastInsertId();
+              }
+
+
               if ($deleteFlag && $canknow_id) {
 
                 $sql = "DELETE FROM tblcandknowledge WHERE canknow_id = :canknow_id AND canknow_canId = :canknow_canId";
@@ -1495,6 +1513,26 @@ function updateCandidateLicense($json)
             foreach ($license as $item) {
                 $deleteFlag = $item['deleteFlag'] ?? false;
                 $license_id = $item['license_id'] ?? null;
+                $license_type_id = $item['license_type_id'] ?? null;
+                $license_masterId = $item['license_masterId'] ?? null;
+
+
+                if ($license_type_id === "custom" && !empty($item['customLicenseType'])) {
+                  $sql = "INSERT INTO tbllicensetype (license_type_name) VALUES (:license_type_name)";
+                  $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':license_type_name', $item['customLicenseType']);
+                  $stmt->execute();
+                  $license_type_id = $conn->lastInsertId();
+                }
+
+                if ($license_masterId === "custom" && !empty($item['customLicenseMaster'])) {
+                  $sql = "INSERT INTO tbllicensemaster (license_master_name, license_master_typeId) VALUES (:license_master_name, :license_master_typeId)";
+                  $stmt = $conn->prepare($sql);
+                  $stmt->bindParam(':license_master_name', $item['customLicenseMaster']);
+                  $stmt->bindParam(':license_master_typeId', $license_type_id);
+                  $stmt->execute();
+                  $license_masterId = $conn->lastInsertId();
+                }
 
                 // Handle delete operation
                 if ($deleteFlag && $license_id) {
@@ -1511,7 +1549,7 @@ function updateCandidateLicense($json)
                                 license_number = :license_number
                             WHERE license_id = :license_id";
                     $stmt = $conn->prepare($sql);
-                    $stmt->bindParam(':license_masterId', $item['license_masterId'], PDO::PARAM_INT);
+                    $stmt->bindParam(':license_masterId', $license_masterId, PDO::PARAM_INT);
                     $stmt->bindParam(':license_number', $item['license_number'], PDO::PARAM_STR);
                     $stmt->bindParam(':license_id', $item['license_id'], PDO::PARAM_INT);
                     $stmt->execute();
@@ -1521,7 +1559,7 @@ function updateCandidateLicense($json)
                             VALUES (:license_canId, :license_masterId, :license_number)";
                     $stmt = $conn->prepare($sql);
                     $stmt->bindParam(':license_canId', $candidateId, PDO::PARAM_INT);
-                    $stmt->bindParam(':license_masterId', $item['license_masterId'], PDO::PARAM_INT);
+                    $stmt->bindParam(':license_masterId', $license_masterId, PDO::PARAM_INT);
                     $stmt->bindParam(':license_number', $item['license_number'], PDO::PARAM_STR);
                     $stmt->execute();
                 }
@@ -2112,6 +2150,9 @@ switch ($operation) {
     break;
   case "getLicense":
     echo $user->getLicense();
+    break;
+  case "getLicenseType":
+    echo $user->getLicenseType();
     break;
   case "getKnowledge":
     echo $user->getKnowledge();
