@@ -659,7 +659,7 @@ function getAppliedJobs() {
                 ) c ON b.app_id = c.appS_appId
                 INNER JOIN tblapplicationstatus e ON c.max_appS_id = e.appS_id
                 INNER JOIN tblstatus d ON e.appS_statusId = d.status_id
-                LEFT JOIN tbljobpassing o ON a.jobM_id = o.passing_jobId
+                INNER JOIN tbljobpassing o ON a.jobM_id = o.passing_jobId
 
                 WHERE b.app_candId = :cand_id
                 ORDER BY b.app_datetime DESC";
@@ -1811,16 +1811,18 @@ function insertExamResult($json) {
   $status = isset($data['examR_status']) ? (int) $data['examR_status'] : 0;
   $totalScore = isset($data['examR_totalscore']) ? (int) $data['examR_totalscore'] : 0;
   $appId = isset($data['app_id']) ? (int) $data['app_id'] : 0;
+  $jobMId = isset($data['examR_jobMId']) ? (int) $data['examR_jobMId'] : 0;
 
   if ($candId && $examId) {
       try {
           $conn->beginTransaction();
 
-          $sql = "INSERT INTO tblexamresult (examR_candId, examR_examId, examR_score, examR_totalscore, examR_status, examR_date)
-                  VALUES (:candId, :examId, :score, :totalScore, :status, NOW())";
+          $sql = "INSERT INTO tblexamresult (examR_candId, examR_examId, examR_jobMId, examR_score, examR_totalscore, examR_status, examR_date)
+                  VALUES (:candId, :examId, :jobMId, :score, :totalScore, :status, NOW())";
           $stmt = $conn->prepare($sql);
           $stmt->bindParam(':candId', $candId, PDO::PARAM_INT);
           $stmt->bindParam(':examId', $examId, PDO::PARAM_INT);
+          $stmt->bindParam(':jobMId', $jobMId, PDO::PARAM_INT);
           $stmt->bindParam(':score', $score, PDO::PARAM_INT);
           $stmt->bindParam(':status', $status, PDO::PARAM_INT);
           $stmt->bindParam(':totalScore', $totalScore, PDO::PARAM_INT);
@@ -1919,15 +1921,16 @@ function fetchExamResult($json){
     $candId = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
 
     $sql = "SELECT
-                a.examR_score,
-                a.examR_totalscore,
-                c.jobM_title,
-                a.examR_status
-            FROM tblexamresult a
-            INNER JOIN tblexam b ON a.examR_examId = b.exam_id
-            INNER JOIN tbljobsmaster c ON b.exam_jobMId = c.jobM_id
-            INNER JOIN tblcandidates d ON a.examR_candId = d.cand_id
-            WHERE a.examR_candId = :cand_id";
+              a.examR_score,
+              a.examR_totalscore,
+              c.jobM_title,
+              a.examR_status
+          FROM tblexamresult a
+          INNER JOIN tblexam b ON a.examR_examId = b.exam_id
+          LEFT JOIN tbljobsmaster c ON a.examR_jobMId = c.jobM_id
+          INNER JOIN tblcandidates d ON a.examR_candId = d.cand_id
+          WHERE a.examR_candId = :cand_id;
+            ";
 
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $candId, PDO::PARAM_INT);
@@ -1964,23 +1967,26 @@ function getJobOffer($json) {
     }
 
     $candId = isset($data['cand_id']) ? (int) $data['cand_id'] : 0;
+    $jobMId = isset($data['jobM_id']) ? (int) $data['jobM_id'] : 0;
 
     $sql = "SELECT
                 a.joboffer_id,
                 a.joboffer_document,
                 a.joboffer_salary,
-                d.statusjobO_date,
                 a.joboffer_expiryDate,
                 b.jobM_title,
-                c.jobofferS_name
+                b.jobM_id,
+                c.statusjobO_date,
+                d.jobofferS_name
             FROM tbljoboffer a
             INNER JOIN tbljobsmaster b ON a.joboffer_jobMId = b.jobM_id
-            INNER JOIN tblstatusjoboffer d ON a.joboffer_id = d.statusjobO_jobofferId
-            INNER JOIN tbljobofferstatus c ON d.statusjobO_statusId = c.jobofferS_id
-            WHERE a.joboffer_candId = :cand_id";
+            INNER JOIN tblstatusjoboffer c ON a.joboffer_id = c.statusjobO_jobofferId
+            INNER JOIN tbljobofferstatus d ON c.statusjobO_statusId = d.jobofferS_id
+            WHERE a.joboffer_candId = :cand_id AND a.joboffer_jobMId = :jobM_id";
 
     $stmt = $conn->prepare($sql);
     $stmt->bindParam(':cand_id', $candId, PDO::PARAM_INT);
+    $stmt->bindParam(':jobM_id', $jobMId, PDO::PARAM_INT);
     $stmt->execute();
 
     $result = $stmt->fetchAll(PDO::FETCH_ASSOC);

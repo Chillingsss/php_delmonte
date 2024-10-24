@@ -73,13 +73,12 @@ class Admin
     $todayDate = $this->getCurrentDate();
 
     try {
-      $sql = "INSERT INTO tbljobsmaster (jobM_title, jobM_description, jobM_status, jobM_createdAt, jobM_passpercentage) VALUES (:jobM_title, :jobM_description, :jobM_status, :jobM_createdAt, :passing)";
+      $sql = "INSERT INTO tbljobsmaster (jobM_title, jobM_description, jobM_status, jobM_createdAt) VALUES (:jobM_title, :jobM_description, :jobM_status, :jobM_createdAt)";
       $stmt = $conn->prepare($sql);
       $stmt->bindParam(":jobM_title", $jobMaster['title']);
       $stmt->bindParam(":jobM_description", $jobMaster['description']);
       $stmt->bindParam(":jobM_status", $jobMaster['isJobActive']);
       $stmt->bindParam(":jobM_createdAt", $todayDate);
-      $stmt->bindParam(":passing", $jobMaster['passingPercentage']);
       $stmt->execute();
 
       $jobMasterId = $conn->lastInsertId();
@@ -280,7 +279,7 @@ class Admin
             INNER JOIN tblapplicationstatus d ON d.appS_appId = a.app_id
             INNER JOIN tblstatus e ON e.status_id = d.appS_statusId
             WHERE a.app_jobMId = :jobId
-            AND d.appS_date = (SELECT MAX(sub_d.appS_date)
+            AND d.appS_id = (SELECT MAX(sub_d.appS_id)
             FROM tblapplicationstatus sub_d
             WHERE sub_d.appS_appId = d.appS_appId)";
     $stmt = $conn->prepare($sql);
@@ -447,29 +446,11 @@ class Admin
     $conn->beginTransaction();
     try {
       $data = [];
-
-      $sql = "SELECT * FROM tblcoursescategory";
-      $stmt = $conn->prepare($sql);
-      $stmt->execute();
-      $data['courseCategory'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      $sql = "SELECT * FROM tblpersonalskills";
-      $stmt = $conn->prepare($sql);
-      $stmt->execute();
-      $data['skills'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      $sql = "SELECT * FROM tblpersonaltraining";
-      $stmt = $conn->prepare($sql);
-      $stmt->execute();
-      $data['training'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-      $sql = "SELECT * FROM tblpersonalknowledge";
-      $stmt = $conn->prepare($sql);
-      $stmt->execute();
-      $data['knowledge'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+      $data['courseCategory'] = $this->getCourseCategory();
+      $data['skills'] = $this->getSkills();
+      $data['training'] = $this->getTraining();
+      $data['knowledge'] = $this->getKnowledge();
       $conn->commit();
-
       return json_encode($data);
     } catch (\Throwable $th) {
       $conn->rollBack();
@@ -1035,6 +1016,13 @@ class Admin
     $stmt->execute();
     $criteria["knowledge"] = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+    $sql = "SELECT COUNT(`joboffer_id`) AS isJobOffered FROM tbljoboffer WHERE `joboffer_candId` = :cand_id AND `joboffer_jobMId` = :job_id";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(':cand_id', $cand_id);
+    $stmt->bindParam(':job_id', $job_id);
+    $stmt->execute();
+    $returnValue["jobOffered"] = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
     // Add job criteria to returnValue
     $returnValue["criteria"] = $criteria;
 
@@ -1107,6 +1095,7 @@ class Admin
 
   function changeApplicantStatus($json)
   {
+    // {"jobId": 12, "candId": 12, "status": 4}
     include "connection.php";
     $data = json_decode($json, true);
     $appId = $this->applicationIds($data['jobId'], $data['candId']);
@@ -1243,8 +1232,6 @@ class Admin
 
     return json_encode($returnValue);
   }
-
-
 
   function updateJobPassingPercent($json)
   {
